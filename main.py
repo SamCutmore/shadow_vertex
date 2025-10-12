@@ -1,6 +1,5 @@
 def main():
-    print("Hello from shadow-vertex!")
-
+    print("Hello world!")
 
 if __name__ == "__main__":
     main()
