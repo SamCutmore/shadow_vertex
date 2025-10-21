@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from fractions import Fraction
-from typing import Dict, list
-from enum import enum
+from typing import Dict, List
+import enum
 
 class Sense(enum):
     Less_or_equal = "<="
