@@ -81,7 +81,7 @@ class LinearProgram:
     
 lp = LinearProgram()
 
-lp.set_objective({"x1": 2, "x2": 3}, sense=ObjectiveExtremum.MAXIMUM)
+lp.set_objective({"x1": 2, "x2": 3}, sense=ObjectiveExtremum.MINIMUM)
 
 lp.add_constraint({"x1": 1, "x2": 2}, ConstraintRelation.LE, 5)
 lp.add_constraint({"x1": 3, "x2": 1}, ConstraintRelation.EQ, 8)
@@ -92,4 +92,3 @@ row_indices, column_indices, coefficients = lp.build_sparse_matrix()
 print("\nSparse matrix (row_indices, column_indices, coefficients):")
 for t in zip(row_indices, column_indices, coefficients):
     print(t)
-
