@@ -1,4 +1,4 @@
-use crate::matrix_adt::Matrix;
+use crate::matrix_adt::{Matrix};
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Shl, ShlAssign, Shr, ShrAssign};
 
@@ -326,7 +326,6 @@ where T: Clone + ShrAssign
         }
     }
 }
-
 
 // Dot product
 impl<T> Matrix<T>

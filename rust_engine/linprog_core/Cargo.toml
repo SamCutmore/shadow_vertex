@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+num-rational = "0.4.2"
+pyo3 = { version = "0.27.2", features = ["extension-module"] }
