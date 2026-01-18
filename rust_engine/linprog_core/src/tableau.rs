@@ -6,7 +6,6 @@ pub struct Tableau<T> {
     pub constraints: Matrix<T>, // - Constraint Matrix
     pub slack: Matrix<T>,       // - Slack Variables
     pub rhs: Vec<T>,            // - Right Hand Side
-    pub cost: Vec<T>,           // - Cost
     pub basis: Vec<usize>,      // - Basic Variables
     pub nonbasis: Vec<usize>,   // - Non-basic Variables
 }
@@ -14,14 +13,13 @@ pub struct Tableau<T> {
 impl<T> Tableau<T>
 where T: Clone + Default,
 {
-    pub fn from_standard_form(constraints: Matrix<T>,slack: Matrix<T>, rhs: Vec<T>, cost: Vec<T>, ) -> Self {
+    pub fn from_standard_form(constraints: Matrix<T>,slack: Matrix<T>, rhs: Vec<T>,) -> Self {
         let m = constraints.rows;
         let n = constraints.cols;
 
         assert_eq!(slack.rows, m, "slack rows must equal constraint rows");
         assert_eq!(slack.cols, m, "slack must be square (m x m)");
         assert_eq!(rhs.len(), m, "rhs length must equal number of rows");
-        assert_eq!(cost.len(), n + m, "cost length must equal total number of variables");
 
         let basis: Vec<usize> = (n..n + m).collect();
         let nonbasis: Vec<usize> = (0..n).collect();
@@ -30,7 +28,6 @@ where T: Clone + Default,
             constraints,
             slack,
             rhs,
-            cost,
             basis,
             nonbasis,
         }
