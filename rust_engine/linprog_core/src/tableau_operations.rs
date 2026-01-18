@@ -4,8 +4,8 @@ use crate::tableau::{TableauRow, TableauRowMut};
 #[inline]
 fn assert_same_shape<T>(a: &TableauRow<T>, b: &TableauRow<T>) {
     debug_assert_eq!(
-        a.constraints.data.len() + a.slack.data.len(),
-        b.constraints.data.len() + b.slack.data.len()
+        a.coefficients.data.len() + a.slack.data.len(),
+        b.coefficients.data.len() + b.slack.data.len()
     );
 }
 
@@ -26,7 +26,7 @@ where T: Copy + Add<Output = T>,
     fn add(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
         assert_same_shape(self, rhs);
         TableauRow {
-            constraints: &self.constraints + &rhs.constraints,
+            coefficients: &self.coefficients + &rhs.coefficients,
             slack: &self.slack + &rhs.slack,
             rhs: self.rhs + rhs.rhs,
         }
@@ -74,7 +74,7 @@ where T: Copy + Add<Output = T>,
     type Output = TableauRow<T>;
     fn add(self, rhs: T) -> TableauRow<T> {
         TableauRow {
-            constraints: &self.constraints + rhs,
+            coefficients: &self.coefficients + rhs,
             slack: &self.slack + rhs,
             rhs: self.rhs + rhs,
         }
@@ -99,7 +99,7 @@ impl<'a, T> AddAssign<&'a TableauRow<T>> for TableauRow<T>
 where T: Copy + AddAssign 
 {
     fn add_assign(&mut self, rhs: &'a TableauRow<T>) {
-        self.constraints += &rhs.constraints;
+        self.coefficients += &rhs.coefficients;
         self.slack += &rhs.slack;
         self.rhs += rhs.rhs;
     }
@@ -109,7 +109,7 @@ impl<T> AddAssign<T> for TableauRow<T>
 where T: Copy + AddAssign,
 {
     fn add_assign(&mut self, rhs: T) {
-        self.constraints += rhs;
+        self.coefficients += rhs;
         self.slack += rhs;
         self.rhs += rhs;
     }
@@ -124,7 +124,7 @@ impl<'a, T> AddAssign<&TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + AddAssign,
 {
     fn add_assign(&mut self, rhs: &TableauRow<T>) {
-        self.constraints += &rhs.constraints;
+        self.coefficients += &rhs.coefficients;
         self.slack += &rhs.slack;
         *self.rhs += rhs.rhs;
     }
@@ -135,7 +135,7 @@ impl<'a, T> AddAssign<TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + AddAssign,
 {
     fn add_assign(&mut self, rhs: TableauRow<T>) {
-        self.constraints += rhs.constraints;
+        self.coefficients += rhs.coefficients;
         self.slack += rhs.slack;
         *self.rhs += rhs.rhs;
     }
@@ -146,7 +146,7 @@ impl<'a, T> AddAssign<T> for TableauRowMut<'a, T>
 where T: Copy + AddAssign,
 {
     fn add_assign(&mut self, rhs: T) {
-        self.constraints += rhs;
+        self.coefficients += rhs;
         self.slack += rhs;
         *self.rhs += rhs;
     }
@@ -165,7 +165,7 @@ where T: Copy + Sub<Output = T>,
     fn sub(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
         assert_same_shape(self, rhs);
         TableauRow {
-            constraints: &self.constraints - &rhs.constraints,
+            coefficients: &self.coefficients - &rhs.coefficients,
             slack: &self.slack - &rhs.slack,
             rhs: self.rhs - rhs.rhs,
         }
@@ -209,7 +209,7 @@ where T: Copy + Sub<Output = T>,
     type Output = TableauRow<T>;
     fn sub(self, rhs: T) -> TableauRow<T> {
         TableauRow {
-            constraints: &self.constraints - rhs,
+            coefficients: &self.coefficients - rhs,
             slack: &self.slack - rhs,
             rhs: self.rhs - rhs,
         }
@@ -231,7 +231,7 @@ impl<'a, T> SubAssign<&'a TableauRow<T>> for TableauRow<T>
 where T: Copy + SubAssign 
 {
     fn sub_assign(&mut self, rhs: &'a TableauRow<T>) {
-        self.constraints -= &rhs.constraints;
+        self.coefficients -= &rhs.coefficients;
         self.slack -= &rhs.slack;
         self.rhs -= rhs.rhs;
     }
@@ -241,7 +241,7 @@ impl<T> SubAssign<T> for TableauRow<T>
 where T: Copy + SubAssign,
 {
     fn sub_assign(&mut self, rhs: T) {
-        self.constraints -= rhs;
+        self.coefficients -= rhs;
         self.slack -= rhs;
         self.rhs -= rhs;
     }
@@ -252,7 +252,7 @@ impl<'a, T> SubAssign<&TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + SubAssign,
 {
     fn sub_assign(&mut self, rhs: &TableauRow<T>) {
-        self.constraints -= &rhs.constraints;
+        self.coefficients -= &rhs.coefficients;
         self.slack -= &rhs.slack;
         *self.rhs -= rhs.rhs;
     }
@@ -262,7 +262,7 @@ impl<'a, T> SubAssign<TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + SubAssign,
 {
     fn sub_assign(&mut self, rhs: TableauRow<T>) {
-        self.constraints -= rhs.constraints;
+        self.coefficients -= rhs.coefficients;
         self.slack -= rhs.slack;
         *self.rhs -= rhs.rhs;
     }
@@ -272,7 +272,7 @@ impl<'a, T> SubAssign<T> for TableauRowMut<'a, T>
 where T: Copy + SubAssign,
 {
     fn sub_assign(&mut self, rhs: T) {
-        self.constraints -= rhs;
+        self.coefficients -= rhs;
         self.slack -= rhs;
         *self.rhs -= rhs;
     }
@@ -290,7 +290,7 @@ where T: Copy + Mul<Output = T>,
     fn mul(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
         assert_same_shape(self, rhs);
         TableauRow {
-            constraints: &self.constraints * &rhs.constraints,
+            coefficients: &self.coefficients * &rhs.coefficients,
             slack: &self.slack * &rhs.slack,
             rhs: self.rhs * rhs.rhs,
         }
@@ -325,7 +325,7 @@ where T: Copy + Mul<Output = T>,
     type Output = TableauRow<T>;
     fn mul(self, rhs: T) -> TableauRow<T> {
         TableauRow {
-            constraints: &self.constraints * rhs,
+            coefficients: &self.coefficients * rhs,
             slack: &self.slack * rhs,
             rhs: self.rhs * rhs,
         }
@@ -344,7 +344,7 @@ impl<'a, T> MulAssign<&'a TableauRow<T>> for TableauRow<T>
 where T: Copy + MulAssign 
 {
     fn mul_assign(&mut self, rhs: &'a TableauRow<T>) {
-        self.constraints *= &rhs.constraints;
+        self.coefficients *= &rhs.coefficients;
         self.slack *= &rhs.slack;
         self.rhs *= rhs.rhs;
     }
@@ -354,7 +354,7 @@ impl<T> MulAssign<T> for TableauRow<T>
 where T: Copy + MulAssign,
 {
     fn mul_assign(&mut self, rhs: T) {
-        self.constraints *= rhs;
+        self.coefficients *= rhs;
         self.slack *= rhs;
         self.rhs *= rhs;
     }
@@ -364,7 +364,7 @@ impl<'a, T> MulAssign<&TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + MulAssign,
 {
     fn mul_assign(&mut self, rhs: &TableauRow<T>) {
-        self.constraints *= &rhs.constraints;
+        self.coefficients *= &rhs.coefficients;
         self.slack *= &rhs.slack;
         *self.rhs *= rhs.rhs;
     }
@@ -374,7 +374,7 @@ impl<'a, T> MulAssign<TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + MulAssign,
 {
     fn mul_assign(&mut self, rhs: TableauRow<T>) {
-        self.constraints *= rhs.constraints;
+        self.coefficients *= rhs.coefficients;
         self.slack *= rhs.slack;
         *self.rhs *= rhs.rhs;
     }
@@ -384,7 +384,7 @@ impl<'a, T> MulAssign<T> for TableauRowMut<'a, T>
 where T: Copy + MulAssign,
 {
     fn mul_assign(&mut self, rhs: T) {
-        self.constraints *= rhs;
+        self.coefficients *= rhs;
         self.slack *= rhs;
         *self.rhs *= rhs;
     }
@@ -402,7 +402,7 @@ where T: Copy + Div<Output = T>,
     fn div(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
         assert_same_shape(self, rhs);
         TableauRow {
-            constraints: &self.constraints / &rhs.constraints,
+            coefficients: &self.coefficients / &rhs.coefficients,
             slack: &self.slack / &rhs.slack,
             rhs: self.rhs / rhs.rhs,
         }
@@ -437,7 +437,7 @@ where T: Copy + Div<Output = T>,
     type Output = TableauRow<T>;
     fn div(self, rhs: T) -> TableauRow<T> {
         TableauRow {
-            constraints: &self.constraints / rhs,
+            coefficients: &self.coefficients / rhs,
             slack: &self.slack / rhs,
             rhs: self.rhs / rhs,
         }
@@ -456,7 +456,7 @@ impl<'a, T> DivAssign<&'a TableauRow<T>> for TableauRow<T>
 where T: Copy + DivAssign 
 {
     fn div_assign(&mut self, rhs: &'a TableauRow<T>) {
-        self.constraints /= &rhs.constraints;
+        self.coefficients /= &rhs.coefficients;
         self.slack /= &rhs.slack;
         self.rhs /= rhs.rhs;
     }
@@ -466,7 +466,7 @@ impl<T> DivAssign<T> for TableauRow<T>
 where T: Copy + DivAssign,
 {
     fn div_assign(&mut self, rhs: T) {
-        self.constraints /= rhs;
+        self.coefficients /= rhs;
         self.slack /= rhs;
         self.rhs /= rhs;
     }
@@ -476,7 +476,7 @@ impl<'a, T> DivAssign<&TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + DivAssign,
 {
     fn div_assign(&mut self, rhs: &TableauRow<T>) {
-        self.constraints /= &rhs.constraints;
+        self.coefficients /= &rhs.coefficients;
         self.slack /= &rhs.slack;
         *self.rhs /= rhs.rhs;
     }
@@ -486,7 +486,7 @@ impl<'a, T> DivAssign<TableauRow<T>> for TableauRowMut<'a, T>
 where T: Copy + DivAssign,
 {
     fn div_assign(&mut self, rhs: TableauRow<T>) {
-        self.constraints /= rhs.constraints;
+        self.coefficients /= rhs.coefficients;
         self.slack /= rhs.slack;
         *self.rhs /= rhs.rhs;
     }
@@ -496,7 +496,7 @@ impl<'a, T> DivAssign<T> for TableauRowMut<'a, T>
 where T: Copy + DivAssign,
 {
     fn div_assign(&mut self, rhs: T) {
-        self.constraints /= rhs;
+        self.coefficients /= rhs;
         self.slack /= rhs;
         *self.rhs /= rhs;
     }

@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone)]
 pub struct Tableau<T> {
-    pub constraints: Matrix<T>, // - Constraint Matrix
+    pub coefficients: Matrix<T>, // - Constraint Matrix
     pub slack: Matrix<T>,       // - Slack Variables
     pub rhs: Vec<T>,            // - Right Hand Side
     pub basis: Vec<usize>,      // - Basic Variables
@@ -13,9 +13,9 @@ pub struct Tableau<T> {
 impl<T> Tableau<T>
 where T: Clone + Default,
 {
-    pub fn from_standard_form(constraints: Matrix<T>,slack: Matrix<T>, rhs: Vec<T>,) -> Self {
-        let m = constraints.rows;
-        let n = constraints.cols;
+    pub fn from_standard_form(coefficients: Matrix<T>,slack: Matrix<T>, rhs: Vec<T>,) -> Self {
+        let m = coefficients.rows;
+        let n = coefficients.cols;
 
         assert_eq!(slack.rows, m, "slack rows must equal constraint rows");
         assert_eq!(slack.cols, m, "slack must be square (m x m)");
@@ -25,7 +25,7 @@ where T: Clone + Default,
         let nonbasis: Vec<usize> = (0..n).collect();
 
         Self {
-            constraints,
+            coefficients,
             slack,
             rhs,
             basis,
@@ -36,11 +36,11 @@ where T: Clone + Default,
 
 impl<T> Tableau<T> {
     pub fn rows(&self) -> usize {
-        self.constraints.rows
+        self.coefficients.rows
     }
 
     pub fn cols(&self) -> usize {
-        self.constraints.cols + self.slack.cols + 1
+        self.coefficients.cols + self.slack.cols + 1
     }
 }
 
@@ -52,11 +52,12 @@ impl<T> Index<(usize, usize)> for Tableau<T> {
         debug_assert!(r < self.rows());
         debug_assert!(c < self.cols());
 
-        let a_cols = self.constraints.cols;
+        let a_cols = self.coefficients.cols;
         let s_cols = self.slack.cols;
 
         if c < a_cols {
-            &self.constraints[(r, c)]
+            &self.coefficients
+[(r, c)]
         } else if c < a_cols + s_cols {
             &self.slack[(r, c - a_cols)]
         } else {
@@ -71,11 +72,12 @@ impl<T> IndexMut<(usize, usize)> for Tableau<T> {
         debug_assert!(r < self.rows());
         debug_assert!(c < self.cols());
 
-        let a_cols = self.constraints.cols;
+        let a_cols = self.coefficients.cols;
         let s_cols = self.slack.cols;
 
         if c < a_cols {
-            &mut self.constraints[(r, c)]
+            &mut self.coefficients
+[(r, c)]
         } else if c < a_cols + s_cols {
             &mut self.slack[(r, c - a_cols)]
         } else {
@@ -86,13 +88,13 @@ impl<T> IndexMut<(usize, usize)> for Tableau<T> {
 
 #[derive(Debug, Clone)]
 pub struct TableauRow<T> {
-    pub constraints: Row<T>,
+    pub coefficients: Row<T>,
     pub slack: Row<T>,
     pub rhs: T,
 }
 
 pub struct TableauRowMut<'a, T> {
-    pub constraints: RowMut<'a, T>,
+    pub coefficients: RowMut<'a, T>,
     pub slack: RowMut<'a, T>,
     pub rhs: &'a mut T,
 }
@@ -100,7 +102,7 @@ pub struct TableauRowMut<'a, T> {
 impl<T: Clone> Tableau<T> {
     pub fn row(&self, r: usize) -> TableauRow<T> {
         TableauRow {
-            constraints: self.constraints.row(r),
+            coefficients: self.coefficients.row(r),
             slack: self.slack.row(r),
             rhs: self.rhs[r].clone(),
         }
@@ -108,7 +110,7 @@ impl<T: Clone> Tableau<T> {
 
     pub fn row_mut(&mut self, r: usize) -> TableauRowMut<'_, T> {
         TableauRowMut {
-            constraints: self.constraints.row_mut(r),
+            coefficients : self.coefficients.row_mut(r),
             slack: self.slack.row_mut(r),
             rhs: &mut self.rhs[r],
         }
@@ -117,7 +119,7 @@ impl<T: Clone> Tableau<T> {
 
 impl<T> TableauRow<T> {
     pub fn cols(&self) -> usize {
-        self.constraints.data.len() + self.slack.data.len() + 1
+        self.coefficients.data.len() + self.slack.data.len() + 1
     }
 }
 
@@ -125,13 +127,14 @@ impl<T> Index<usize> for TableauRow<T> {
     type Output = T;
 
     fn index(&self, c: usize) -> &Self::Output {
-        let a = self.constraints.data.len();
+        let a = self.coefficients.data.len();
         let s = self.slack.data.len();
 
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &self.constraints.data[c]
+            &self.coefficients
+.data[c]
         } else if c < a + s {
             &self.slack.data[c - a]
         } else {
@@ -142,7 +145,7 @@ impl<T> Index<usize> for TableauRow<T> {
 
 impl<'a, T> TableauRowMut<'a, T> {
     pub fn cols(&self) -> usize {
-        self.constraints.data.len() + self.slack.data.len() + 1
+        self.coefficients.data.len() + self.slack.data.len() + 1
     }
 }
 
@@ -150,13 +153,14 @@ impl<'a, T> Index<usize> for TableauRowMut<'a, T> {
     type Output = T;
 
     fn index(&self, c: usize) -> &Self::Output {
-        let a = self.constraints.data.len();
+        let a = self.coefficients.data.len();
         let s = self.slack.data.len();
 
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &self.constraints.data[c]
+            &self.coefficients
+.data[c]
         } else if c < a + s {
             &self.slack.data[c - a]
         } else {
@@ -167,13 +171,14 @@ impl<'a, T> Index<usize> for TableauRowMut<'a, T> {
 
 impl<'a, T> IndexMut<usize> for TableauRowMut<'a, T> {
     fn index_mut(&mut self, c: usize) -> &mut Self::Output {
-        let a = self.constraints.data.len();
+        let a = self.coefficients.data.len();
         let s = self.slack.data.len();
 
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &mut self.constraints.data[c]
+            &mut self.coefficients
+.data[c]
         } else if c < a + s {
             &mut self.slack.data[c - a]
         } else {

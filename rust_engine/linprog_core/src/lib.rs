@@ -297,9 +297,9 @@ mod tests {
 
     #[test]
     fn test_tableau_row_addition() {
-        let mut constraints = Matrix::new(2, 2);
-        constraints[(0, 0)] = 1; constraints[(0, 1)] = 2;
-        constraints[(1, 0)] = 3; constraints[(1, 1)] = 4;
+        let mut coefficients = Matrix::new(2, 2);
+        coefficients[(0, 0)] = 1; coefficients[(0, 1)] = 2;
+        coefficients[(1, 0)] = 3; coefficients[(1, 1)] = 4;
 
         let mut slack = Matrix::new(2, 2);
         slack[(0, 0)] = 1; slack[(0, 1)] = 0;
@@ -308,7 +308,7 @@ mod tests {
         let rhs = vec![10, 20];
 
         let tableau = Tableau::from_standard_form(
-            constraints,
+            coefficients,
             slack,
             rhs,
         );
@@ -318,16 +318,16 @@ mod tests {
 
         let r2 = &r0 + &r1 + 1;
 
-        assert_eq!(r2.constraints.data, vec![5, 7]);
+        assert_eq!(r2.coefficients.data, vec![5, 7]);
         assert_eq!(r2.slack.data, vec![2, 2]);
         assert_eq!(r2.rhs, 31);
     }
 
     #[test]
     fn test_tableau_row_mut_addition() {
-        let mut constraints = Matrix::new(2, 2);
-        constraints[(0, 0)] = 1; constraints[(0, 1)] = 2;
-        constraints[(1, 0)] = 3; constraints[(1, 1)] = 4;
+        let mut coefficients = Matrix::new(2, 2);
+        coefficients[(0, 0)] = 1; coefficients[(0, 1)] = 2;
+        coefficients[(1, 0)] = 3; coefficients[(1, 1)] = 4;
 
         let mut slack = Matrix::new(2, 2);
         slack[(0, 0)] = 1; slack[(0, 1)] = 0;
@@ -336,7 +336,7 @@ mod tests {
         let rhs = vec![10, 20];
 
         let mut tableau = Tableau::from_standard_form(
-            constraints,
+            coefficients,
             slack,
             rhs,
         );
@@ -349,16 +349,16 @@ mod tests {
 
         let row0 = tableau.row(0);
 
-        assert_eq!(row0.constraints.data, vec![5, 7]);
+        assert_eq!(row0.coefficients.data, vec![5, 7]);
         assert_eq!(row0.slack.data, vec![2, 2]);
         assert_eq!(row0.rhs, 31);
     }
 
     #[test]
     fn test_tableau_row_mut_rational_addition() {
-        let mut constraints = Matrix::<Rational64>::new(2,2);
-        constraints[(0,0)] = Rational64::new(1,1);  constraints[(0,1)] = Rational64::new(2,1);
-        constraints[(1,0)] = Rational64::new(3,1);  constraints[(1,1)] = Rational64::new(4,1);
+        let mut coefficients = Matrix::<Rational64>::new(2,2);
+        coefficients[(0,0)] = Rational64::new(1,1);  coefficients[(0,1)] = Rational64::new(2,1);
+        coefficients[(1,0)] = Rational64::new(3,1);  coefficients[(1,1)] = Rational64::new(4,1);
 
         let mut slack = Matrix::<Rational64>::new(2,2);
         slack[(0,0)] = Rational64::new(1,1);  slack[(0,1)] = Rational64::new(0,1);
@@ -367,7 +367,7 @@ mod tests {
         let rhs = vec![Rational64::new(20,1), Rational64::new(10,1)];
 
         let mut tableau = Tableau::from_standard_form(
-            constraints,
+            coefficients,
             slack,
             rhs,
         );
@@ -380,15 +380,15 @@ mod tests {
 
         let row0 = tableau.row(0);
 
-        assert_eq!(row0.constraints.data, vec![Rational64::new(4,1), Rational64::new(6,1)]);
+        assert_eq!(row0.coefficients.data, vec![Rational64::new(4,1), Rational64::new(6,1)]);
         
     }
 
     #[test]
     fn test_tableau_row_mut_rational_multiplcation() {
-        let mut constraints = Matrix::<Rational64>::new(2,2);
-        constraints[(0,0)] = Rational64::new(1,1);  constraints[(0,1)] = Rational64::new(2,1);
-        constraints[(1,0)] = Rational64::new(3,1);  constraints[(1,1)] = Rational64::new(4,1);
+        let mut coefficients = Matrix::<Rational64>::new(2,2);
+        coefficients[(0,0)] = Rational64::new(1,1);  coefficients[(0,1)] = Rational64::new(2,1);
+        coefficients[(1,0)] = Rational64::new(3,1);  coefficients[(1,1)] = Rational64::new(4,1);
 
         let mut slack = Matrix::<Rational64>::new(2,2);
         slack[(0,0)] = Rational64::new(1,1);  slack[(0,1)] = Rational64::new(0,1);
@@ -397,7 +397,7 @@ mod tests {
         let rhs = vec![Rational64::new(20,1), Rational64::new(10,1)];
 
         let mut tableau = Tableau::from_standard_form(
-            constraints,
+            coefficients,
             slack,
             rhs,
         );
@@ -409,15 +409,15 @@ mod tests {
 
         let row0 = tableau.row(0);
 
-        assert_eq!(row0.constraints.data, vec![Rational64::new(3,1), Rational64::new(6,1)]);
+        assert_eq!(row0.coefficients.data, vec![Rational64::new(3,1), Rational64::new(6,1)]);
         
     }
 
     #[test]
     fn test_tableau_row_mut_rational_add_mul() {
-        let mut constraints = Matrix::<Rational64>::new(2,2);
-        constraints[(0,0)] = Rational64::new(1,1);  constraints[(0,1)] = Rational64::new(2,1);
-        constraints[(1,0)] = Rational64::new(3,1);  constraints[(1,1)] = Rational64::new(4,1);
+        let mut coefficients = Matrix::<Rational64>::new(2,2);
+        coefficients[(0,0)] = Rational64::new(1,1);  coefficients[(0,1)] = Rational64::new(2,1);
+        coefficients[(1,0)] = Rational64::new(3,1);  coefficients[(1,1)] = Rational64::new(4,1);
 
         let mut slack = Matrix::<Rational64>::new(2,2);
         slack[(0,0)] = Rational64::new(1,1);  slack[(0,1)] = Rational64::new(0,1);
@@ -426,7 +426,7 @@ mod tests {
         let rhs = vec![Rational64::new(20,1), Rational64::new(10,1)];
 
         let mut tableau = Tableau::from_standard_form(
-            constraints,
+            coefficients,
             slack,
             rhs,
         );
@@ -439,7 +439,7 @@ mod tests {
 
         let row0 = tableau.row(0);
 
-        assert_eq!(row0.constraints.data, vec![Rational64::new(10,1), Rational64::new(14,1)]);
+        assert_eq!(row0.coefficients.data, vec![Rational64::new(10,1), Rational64::new(14,1)]);
         
     }
 }
