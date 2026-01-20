@@ -381,7 +381,6 @@ mod tests {
         let row0 = tableau.row(0);
 
         assert_eq!(row0.coefficients.data, vec![Rational64::new(4,1), Rational64::new(6,1)]);
-        
     }
 
     #[test]
@@ -410,7 +409,6 @@ mod tests {
         let row0 = tableau.row(0);
 
         assert_eq!(row0.coefficients.data, vec![Rational64::new(3,1), Rational64::new(6,1)]);
-        
     }
 
     #[test]
@@ -440,6 +438,5 @@ mod tests {
         let row0 = tableau.row(0);
 
         assert_eq!(row0.coefficients.data, vec![Rational64::new(10,1), Rational64::new(14,1)]);
-        
     }
 }

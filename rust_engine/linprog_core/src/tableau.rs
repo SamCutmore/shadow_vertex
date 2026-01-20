@@ -3,11 +3,11 @@ use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone)]
 pub struct Tableau<T> {
-    pub coefficients: Matrix<T>, // - Constraint Matrix
-    pub slack: Matrix<T>,       // - Slack Variables
-    pub rhs: Vec<T>,            // - Right Hand Side
-    pub basis: Vec<usize>,      // - Basic Variables
-    pub nonbasis: Vec<usize>,   // - Non-basic Variables
+    pub coefficients: Matrix<T>,    // - Constraint Matrix
+    pub slack: Matrix<T>,           // - Slack Variables
+    pub rhs: Vec<T>,                // - Right Hand Side
+    pub basis: Vec<usize>,          // - Basic Variables
+    pub nonbasis: Vec<usize>,       // - Non-basic Variables
 }
 
 impl<T> Tableau<T>
@@ -56,8 +56,7 @@ impl<T> Index<(usize, usize)> for Tableau<T> {
         let s_cols = self.slack.cols;
 
         if c < a_cols {
-            &self.coefficients
-[(r, c)]
+            &self.coefficients[(r, c)]
         } else if c < a_cols + s_cols {
             &self.slack[(r, c - a_cols)]
         } else {
@@ -76,8 +75,7 @@ impl<T> IndexMut<(usize, usize)> for Tableau<T> {
         let s_cols = self.slack.cols;
 
         if c < a_cols {
-            &mut self.coefficients
-[(r, c)]
+            &mut self.coefficients[(r, c)]
         } else if c < a_cols + s_cols {
             &mut self.slack[(r, c - a_cols)]
         } else {
@@ -133,8 +131,7 @@ impl<T> Index<usize> for TableauRow<T> {
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &self.coefficients
-.data[c]
+            &self.coefficients.data[c]
         } else if c < a + s {
             &self.slack.data[c - a]
         } else {
@@ -159,8 +156,7 @@ impl<'a, T> Index<usize> for TableauRowMut<'a, T> {
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &self.coefficients
-.data[c]
+            &self.coefficients.data[c]
         } else if c < a + s {
             &self.slack.data[c - a]
         } else {
@@ -177,8 +173,7 @@ impl<'a, T> IndexMut<usize> for TableauRowMut<'a, T> {
         debug_assert!(c < a + s + 1);
 
         if c < a {
-            &mut self.coefficients
-.data[c]
+            &mut self.coefficients.data[c]
         } else if c < a + s {
             &mut self.slack.data[c - a]
         } else {
