@@ -1,4 +1,4 @@
-use crate::matrix_adt::{Matrix};
+use crate::linalg::Matrix;
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Shl, ShlAssign, Shr, ShrAssign};
 
@@ -324,25 +324,5 @@ where T: Clone + ShrAssign
         for (a,b) in self.data.iter_mut().zip(&other.data) {
             *a >>= b.clone();
         }
-    }
-}
-
-// Dot product
-impl<T> Matrix<T>
-where T: Clone + Default + Add<Output = T> + Mul<Output = T>
-{
-    pub fn dot(&self, other: &Matrix<T>) -> Matrix<T> {
-        assert_eq!(self.cols, other.rows);
-        let mut result = Matrix::new(self.rows, other.cols);
-        for r in 0..self.rows {
-            for c in 0..other.cols {
-                let mut sum = T::default();
-                for k in 0..self.cols {
-                    sum = sum + self[(r,k)].clone() * other[(k,c)].clone();
-                }
-                result[(r,c)] = sum;
-            }
-        }
-        result
     }
 }

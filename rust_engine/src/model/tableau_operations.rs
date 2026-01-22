@@ -1,5 +1,6 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
-use crate::tableau::{TableauRow, TableauRowMut};
+use crate::model::{Tableau, TableauRow, TableauRowMut};
+use num_traits::{One, Zero};
 
 #[inline]
 fn assert_same_shape<T>(a: &TableauRow<T>, b: &TableauRow<T>) {
@@ -7,6 +8,114 @@ fn assert_same_shape<T>(a: &TableauRow<T>, b: &TableauRow<T>) {
         a.coefficients.data.len() + a.slack.data.len(),
         b.coefficients.data.len() + b.slack.data.len()
     );
+}
+
+impl<T> Tableau<T> 
+where T: Zero + PartialOrd + Clone + Copy + Div<Output = T> 
+{
+    /// Dantzig's Rule
+    pub fn find_pivot_col_most_negative(&self) -> Option<usize> {
+        let mut best_col = None;
+        let mut min_val = T::zero();
+
+        for (j, val) in self.z_coeffs.iter().enumerate() {
+            if *val < min_val {
+                min_val = *val;
+                best_col = Some(j);
+            }
+        }
+
+        let n = self.z_coeffs.len();
+        for (j, val) in self.z_slack.iter().enumerate() {
+            if *val < min_val {
+                min_val = *val;
+                best_col = Some(n + j);
+            }
+        }
+        best_col
+    }
+
+    /// Bland's Rule
+    pub fn find_pivot_col_bland(&self) -> Option<usize> {
+        for (j, val) in self.z_coeffs.iter().enumerate() {
+            if *val < T::zero() {
+                return Some(j);
+            }
+        }
+
+        let n = self.z_coeffs.len();
+        for (j, val) in self.z_slack.iter().enumerate() {
+            if *val < T::zero() {
+                return Some(n + j);
+            }
+        }
+        None
+    }
+
+    /// Minimum Ratio Test
+    pub fn ratio_test(&self, col: usize) -> Option<usize> {
+        let mut best_row = None;
+        let mut min_ratio: Option<T> = None;
+
+        for i in 0..self.rows() {
+            let entry = self[(i, col)]; 
+
+            if entry > T::zero() {
+                let ratio = self.rhs[i] / entry;
+                if min_ratio.is_none() || ratio < min_ratio.unwrap() {
+                    min_ratio = Some(ratio);
+                    best_row = Some(i);
+                }
+            }
+        }
+        best_row
+    }
+}
+
+impl<T> Tableau<T> 
+where T: Zero + One + PartialOrd + Clone + Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> 
+{
+    pub fn pivot(&mut self, row_idx: usize, col_idx: usize) {
+        let num_cols = self.cols(); 
+        let var_cols = num_cols - 1; // Exclude RHS from the variable loops
+        
+        let z_factor = self.z_row()[col_idx];
+        let pivot_element = self[(row_idx, col_idx)];
+        let inv_pivot = T::one() / pivot_element;
+
+        {
+            let mut p_row = self.row_mut(row_idx);
+            for j in 0..num_cols {
+                p_row[j] = p_row[j] * inv_pivot;
+            }
+        }
+        
+        let normalized_vars: Vec<T> = (0..var_cols).map(|j| self[(row_idx, j)]).collect();
+        let normalized_rhs = self.row_mut(row_idx)[var_cols];
+
+        for i in 0..self.rows() {
+            if i != row_idx {
+                let factor = self[(i, col_idx)];
+                {
+                    let mut current_row = self.row_mut(i);
+                    for j in 0..var_cols {
+                        current_row[j] = current_row[j] - (factor * normalized_vars[j]);
+                    }
+                    current_row[var_cols] = current_row[var_cols] - (factor * normalized_rhs);
+                }
+            }
+        }
+
+        {
+            let mut z_row = self.z_row_mut();
+            for j in 0..var_cols {
+                z_row[j] = z_row[j] - (z_factor * normalized_vars[j]);
+            }
+        }
+        
+        self.z_rhs = self.z_rhs - (z_factor * normalized_rhs);
+        self.basis[row_idx] = col_idx;
+    }
 }
 
 // ====================================================

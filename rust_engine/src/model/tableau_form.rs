@@ -1,25 +1,32 @@
-use crate::matrix_adt::*;
+use crate::linalg::{Matrix, Row, RowMut};
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone)]
 pub struct Tableau<T> {
-    pub coefficients: Matrix<T>,    // - Constraint Matrix
+    pub coefficients: Matrix<T>,    // - Coefficient Matrix
     pub slack: Matrix<T>,           // - Slack Variables
     pub rhs: Vec<T>,                // - Right Hand Side
     pub basis: Vec<usize>,          // - Basic Variables
     pub nonbasis: Vec<usize>,       // - Non-basic Variables
+
+    pub z_coeffs: Vec<T>,           // - Z Row Values
+    pub z_slack: Vec<T>,
+    pub z_rhs: T,
 }
 
 impl<T> Tableau<T>
 where T: Clone + Default,
 {
-    pub fn from_standard_form(coefficients: Matrix<T>,slack: Matrix<T>, rhs: Vec<T>,) -> Self {
+    pub fn new(coefficients: Matrix<T>, slack: Matrix<T>, rhs: Vec<T>, z_coeffs: Vec<T>, z_slack: Vec<T>, z_rhs: T,) -> Self {
         let m = coefficients.rows;
         let n = coefficients.cols;
 
-        assert_eq!(slack.rows, m, "slack rows must equal constraint rows");
-        assert_eq!(slack.cols, m, "slack must be square (m x m)");
-        assert_eq!(rhs.len(), m, "rhs length must equal number of rows");
+        assert_eq!(slack.rows, m, "Slack rows must equal constraint rows");
+        assert_eq!(slack.cols, m, "Slack must be square (m x m)");
+        assert_eq!(rhs.len(), m, "RHS length must equal number of rows");
+        
+        assert_eq!(z_coeffs.len(), n, "Objective coefficients must match number of variables");
+        assert_eq!(z_slack.len(), m, "Objective slack vector must match number of constraints");
 
         let basis: Vec<usize> = (n..n + m).collect();
         let nonbasis: Vec<usize> = (0..n).collect();
@@ -30,6 +37,9 @@ where T: Clone + Default,
             rhs,
             basis,
             nonbasis,
+            z_coeffs,
+            z_slack,
+            z_rhs,
         }
     }
 }
@@ -108,9 +118,25 @@ impl<T: Clone> Tableau<T> {
 
     pub fn row_mut(&mut self, r: usize) -> TableauRowMut<'_, T> {
         TableauRowMut {
-            coefficients : self.coefficients.row_mut(r),
+            coefficients: self.coefficients.row_mut(r),
             slack: self.slack.row_mut(r),
             rhs: &mut self.rhs[r],
+        }
+    }
+
+    pub fn z_row(&self) -> TableauRow<T> {
+        TableauRow {
+            coefficients: Row { data: self.z_coeffs.clone() },
+            slack: Row { data: self.z_slack.clone() },
+            rhs: self.z_rhs.clone(),
+        }
+    }
+
+    pub fn z_row_mut(&mut self) -> TableauRowMut<'_, T> {
+        TableauRowMut {
+            coefficients: RowMut { data: &mut self.z_coeffs },
+            slack: RowMut { data: &mut self.z_slack },
+            rhs: &mut self.z_rhs,
         }
     }
 }

@@ -8,6 +8,14 @@ pub struct Matrix<T> {
 }
 
 impl<T> Matrix<T> {
+    pub fn with_capacity(rows: usize, cols: usize) -> Self {
+        Matrix {
+            rows: 0,
+            cols,
+            data: Vec::with_capacity(rows * cols),
+        }
+    }
+
     #[inline(always)]
     fn linear_index(&self, r: usize, c: usize) -> usize {
         debug_assert!(r < self.rows && c < self.cols);

@@ -1,4 +1,4 @@
-use crate::matrix_adt::{Row, RowMut};
+use crate::linalg::{Row, RowMut};
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 
 // Addition
