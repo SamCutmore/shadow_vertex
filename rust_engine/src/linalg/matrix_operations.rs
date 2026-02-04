@@ -1,9 +1,9 @@
 use crate::linalg::Matrix;
-use std::ops::{Add, Mul,};
+use std::ops::{Add, Mul};
 
-// Dot product
 impl<T> Matrix<T>
-where T: Clone + Default + Add<Output = T> + Mul<Output = T>
+where
+    T: Clone + Default + Add<Output = T> + Mul<Output = T>,
 {
     pub fn dot(&self, other: &Matrix<T>) -> Matrix<T> {
         assert_eq!(self.cols, other.rows);

@@ -2,7 +2,6 @@ use crate::linalg::Matrix;
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Shl, ShlAssign, Shr, ShrAssign};
 
-// Scalar addition
 impl<T> Add<T> for &Matrix<T>
 where T: Clone + Add<Output = T>
 {
@@ -21,7 +20,6 @@ where T: Clone + AddAssign
     }
 }
 
-// Scalar subtraction
 impl<T> Sub<T> for &Matrix<T>
 where T: Clone + Sub<Output = T>
 {
@@ -40,7 +38,6 @@ where T: Clone + SubAssign
     }
 }
 
-// Scalar multiplication
 impl<T> Mul<T> for &Matrix<T>
 where T: Clone + Mul<Output = T>
 {
@@ -59,7 +56,6 @@ where T: Clone + MulAssign
     }
 }
 
-// Scalar division
 impl<T> Div<T> for &Matrix<T>
 where T: Clone + Div<Output = T>
 {
@@ -78,7 +74,6 @@ where T: Clone + DivAssign
     }
 }
 
-// Element-wise addition
 impl<T> Add<&Matrix<T>> for &Matrix<T>
 where T: Clone + Add<Output = T>
 {
@@ -106,7 +101,6 @@ where T: Clone + AddAssign
     }
 }
 
-// Element-wise subtraction
 impl<T> Sub<&Matrix<T>> for &Matrix<T>
 where T: Clone + Sub<Output = T>
 {
@@ -162,7 +156,6 @@ where T: Clone + MulAssign
     }
 }
 
-// Element-wise division
 impl<T> Div<&Matrix<T>> for &Matrix<T>
 where T: Clone + Div<Output = T>
 {
@@ -190,7 +183,6 @@ where T: Clone + DivAssign
     }
 }
 
-// Bitwise operations
 impl<T> BitAnd<&Matrix<T>> for &Matrix<T>
 where T: Clone + BitAnd<Output = T>
 {
@@ -272,7 +264,6 @@ where T: Clone + BitXorAssign
     }
 }
 
-// Shift operations
 impl<T> Shl<&Matrix<T>> for &Matrix<T>
 where T: Clone + Shl<Output = T>
 {
