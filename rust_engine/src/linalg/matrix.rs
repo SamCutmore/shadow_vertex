@@ -84,8 +84,6 @@ impl<T: Clone + Default> Matrix<T> {
         self.rows += 1;
     }
 
-    // This is not memory efficient, should implement splciing here.
-    // Splicing may be computationally expensive due to memory shifting.
     pub fn push_column(&mut self, new_col: Option<&[T]>) {
         assert!(new_col.map_or(true, |col| col.len() == self.rows), "Column length must match matrix dimensions");
 
