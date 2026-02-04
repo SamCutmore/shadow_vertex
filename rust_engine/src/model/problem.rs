@@ -4,8 +4,6 @@ use crate::linalg::Matrix;
 use std::ops::Neg;
 use num_traits::{One, Zero};
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Relation {
     LessEqual,
@@ -20,8 +18,9 @@ pub struct Constraint<T> {
     pub rhs: T,
 }
 
-impl<T> Constraint<T> 
-where T: Clone + Copy + Default + PartialOrd + std::ops::Neg<Output = T> 
+impl<T> Constraint<T>
+where
+    T: Clone + Copy + Default + PartialOrd + std::ops::Neg<Output = T>,
 {
     pub fn normalise(mut self) -> Self {
         if self.rhs < T::default() {
@@ -63,8 +62,12 @@ impl<T> Problem<T> {
 }
 
 impl<T> Problem<T>
-where T: Clone + Copy + Default + PartialOrd + One + Zero + Neg<Output = T>
+where
+    T: Clone + Copy + Default + PartialOrd + One + Zero + Neg<Output = T>,
 {
+    pub fn to_tableau(&self) -> Tableau<T> {
+        self.clone().into_tableau_form()
+    }
 
     pub fn into_standard_form(self) -> StandardForm<T> {
         let one = T::one();
@@ -94,9 +97,7 @@ where T: Clone + Copy + Default + PartialOrd + One + Zero + Neg<Output = T>
                     row_data[slack_index] = neg_one.clone();
                     slack_indices.push(slack_index);
                 },
-                Relation::Equal => {
-                    // No push needed, already zero.
-                }
+                Relation::Equal => {}
             }
 
             if normalised.relation != Relation::Equal {
@@ -107,7 +108,6 @@ where T: Clone + Copy + Default + PartialOrd + One + Zero + Neg<Output = T>
             a_matrix.push_row(&row_data);
         }
 
-        // Normalise to Minimise
         let mut c_vec = vec![zero.clone(); total_cols];
 
         for (i, val) in self.objective.into_iter().enumerate() {
@@ -118,13 +118,12 @@ where T: Clone + Copy + Default + PartialOrd + One + Zero + Neg<Output = T>
             };
         }
 
-        // Return the final StandardForm (Matrix A, Vec B, Vec C)
         StandardForm {
             a: a_matrix,
             b: b_vec,
             c: c_vec,
             goal: self.goal,
-            slack_indices: slack_indices,
+            slack_indices,
         }
     }
 
