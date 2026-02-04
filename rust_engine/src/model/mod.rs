@@ -13,6 +13,7 @@ pub enum Goal {
 pub use problem::{Problem, Relation, Constraint};
 pub use standard_form::StandardForm;
 pub use tableau_form::{Tableau, TableauRow, TableauRowMut};
+pub use tableau_operations::PivotResult;
 
 #[cfg(test)]
 mod tests {
@@ -340,5 +341,12 @@ mod tests {
         assert_eq!(tab.z_row()[0], Rational64::new(0, 1));
         assert_eq!(tab.z_row()[1], Rational64::new(-1, 2));
         assert_eq!(tab.z_rhs, Rational64::new(15, 2));
+
+        // current_vertex: basis[0]=2 (s0), basis[1]=0 (x0) -> x0 = rhs[1] = 5/2, x1 = 0
+        let vertex = tab.current_vertex(2);
+        assert_eq!(vertex[0], Rational64::new(5, 2));
+        assert_eq!(vertex[1], Rational64::new(0, 1));
+        // Not yet optimal (negative reduced cost on x1)
+        assert!(!tab.is_optimal());
     }
 }
