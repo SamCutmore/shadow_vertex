@@ -1,8 +1,8 @@
 use std::fmt;
 use num_rational::Rational64;
-use num_traits::{Zero, Signed}; 
+use num_traits::{Zero, Signed};
 
-use crate::model::{Goal};
+use crate::model::Goal;
 use crate::model::problem::{Problem, Relation};
 use crate::model::tableau_form::Tableau;
 
