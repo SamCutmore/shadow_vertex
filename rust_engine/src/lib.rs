@@ -8,7 +8,7 @@ pub mod solvers;
 
 use crate::model::{Problem, Goal, Relation};
 use crate::solvers::{
-    InitSource, TwoPhaseSimplexSolver, SimplexSolver, Solution, Status, Step, Solver,
+    InitSource, ShadowVertexSimplexSolver, TwoPhaseSimplexSolver, SimplexSolver, Solution, Status, Step, Solver,
 };
 
 /// Converts a Python value to Rational64 (int, float, or (num, den) tuple).
@@ -229,6 +229,96 @@ impl PySimplexSolver {
     }
 }
 
+/// Shadow vertex simplex solver (parametric pivot rule on the d–c plane).
+#[pyclass]
+pub struct PyShadowVertexSimplexSolver {
+    inner: ShadowVertexSimplexSolver<Rational64>,
+    initialized: bool,
+}
+
+#[pymethods]
+impl PyShadowVertexSimplexSolver {
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            inner: ShadowVertexSimplexSolver::new(),
+            initialized: false,
+        }
+    }
+
+    pub fn init(&mut self, problem: &PyProblem) -> PyResult<()> {
+        self.inner
+            .init(InitSource::Problem(problem.inner().clone()));
+        self.initialized = true;
+        Ok(())
+    }
+
+    pub fn find_initial_bfs(&mut self) -> PyResult<()> {
+        self.inner
+            .find_initial_bfs()
+            .map(|_| ())
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+
+    pub fn step(&mut self) -> PyResult<PyStep> {
+        if !self.initialized {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Solver not initialized; call init(problem) first",
+            ));
+        }
+        Ok(step_to_py(self.inner.step()))
+    }
+
+    pub fn last_step(&self) -> Option<PyStep> {
+        self.inner
+            .last_step()
+            .map(|s: &Step<Rational64>| step_to_py(s.clone()))
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.inner.is_done()
+    }
+
+    /// Runs to completion and returns the final solution.
+    pub fn solve(&mut self, problem: &PyProblem) -> PyResult<PySolution> {
+        self.initialized = true;
+        run_solve(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+
+    /// Run to completion and return (solution, list of steps visited).
+    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>)> {
+        self.initialized = true;
+        run_solve_with_history(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+
+    /// Run to completion and return solution, step history, and shadow polygon data.
+    /// Shadow points are (d_value, c_value) at each vertex visited, for plotting the
+    /// 2D shadow of the feasible polytope in the (d, c) plane.
+    pub fn solve_with_shadow_history(
+        &mut self,
+        problem: &PyProblem,
+    ) -> PyResult<(PySolution, Vec<PyStep>, Vec<(f64, f64)>)> {
+        self.initialized = true;
+        let result = self
+            .inner
+            .solve_with_shadow_history(InitSource::Problem(problem.inner().clone()))
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+        let solution = solution_to_py(result.solution);
+        let history: Vec<PyStep> = result
+            .history
+            .iter()
+            .map(|s: &Step<Rational64>| step_to_py(s.clone()))
+            .collect();
+        let shadow_points: Vec<(f64, f64)> = result
+            .shadow_points
+            .iter()
+            .map(|(d, c)| (rational_to_f64(*d), rational_to_f64(*c)))
+            .collect();
+        Ok((solution, history, shadow_points))
+    }
+}
+
+
 /// Two-phase (dual / shadow vertex) simplex solver.
 #[pyclass]
 pub struct PyTwoPhaseSimplexSolver {
@@ -356,5 +446,6 @@ fn linprog_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySolution>()?;
     m.add_class::<PySimplexSolver>()?;
     m.add_class::<PyTwoPhaseSimplexSolver>()?;
+    m.add_class::<PyShadowVertexSimplexSolver>()?;
     Ok(())
 }

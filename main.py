@@ -1,6 +1,43 @@
 import linprog_core
 import time
 
+def print_vertex_history(history):
+    print("\n--- Simplex Vertex Path ---")
+    for step in history:
+        coords = step.primal
+        coord_str = ", ".join(f"{v:.6g}" for v in coords)
+        print(f"Step {step.iteration}: [{coord_str}]")
+    print("--- End of Path ---\n")
+
+def benchmark_shadow_klee_minty(n=14):
+    # Setup Klee-Minty 
+    obj = [2**(n - (i + 1)) for i in range(n)]
+    prob = linprog_core.PyProblem(obj, goal="max")
+    
+    for i in range(1, n + 1):
+        coeffs = [2**(i - j + 1) for j in range(1, i)] + [1]
+        coeffs.extend([0] * (n - len(coeffs)))
+        prob.add_constraint(coeffs, "<=", 5**(i-1))
+
+    solver = linprog_core.PyShadowVertexSimplexSolver()
+
+    print(prob)
+
+    print(f"--- Running {n}D Shadow Vertex Simplex ---")
+    start_time = time.time()
+    solution, history = solver.solve_with_history(prob)
+    end_time = time.time()
+
+    elapsed = end_time - start_time
+        
+    print("-" * 40)
+    print(f"Total Pivots:  {len(history)}")
+    print(f"Time Taken:    {elapsed:.6f} seconds")
+    print(f"Pivots/Sec:    {len(history)/elapsed:.2f}")
+    print(f"Final Status:  {solution.status}")
+    print(f"Final Obj:     {solution.objective}")
+    #print_vertex_history(history)
+
 def benchmark_simplex_klee_minty(n=14):
     # Setup Klee-Minty 
     obj = [2**(n - (i + 1)) for i in range(n)]
@@ -11,19 +48,15 @@ def benchmark_simplex_klee_minty(n=14):
         coeffs.extend([0] * (n - len(coeffs)))
         prob.add_constraint(coeffs, "<=", 5**(i-1))
 
-    # Standard simplex
     solver = linprog_core.PySimplexSolver()
 
     print(prob)
-    
-    print(f"--- Benchmarking Standard Simplex ({n}D) ---")
-    print(f"Expected path length: {2**n} pivots")
-    
+
+    print(f"--- Running {n}D Standard Simplex ---")
     start_time = time.time()
-    # solve_with_history
     solution, history = solver.solve_with_history(prob)
     end_time = time.time()
-    
+
     elapsed = end_time - start_time
         
     print("-" * 40)
@@ -32,6 +65,7 @@ def benchmark_simplex_klee_minty(n=14):
     print(f"Pivots/Sec:    {len(history)/elapsed:.2f}")
     print(f"Final Status:  {solution.status}")
     print(f"Final Obj:     {solution.objective}")
+    #print_vertex_history(history)
 
 def run_two_phase_klee_minty_differences(start=3, stop=10):
     pivot_counts = []
@@ -47,7 +81,7 @@ def run_two_phase_klee_minty_differences(start=3, stop=10):
 
         solver = linprog_core.PyTwoPhaseSimplexSolver()
 
-        print(f"--- Running {n}D Shadow Vertex ---")
+        print(f"--- Running {n}D Two phase Simplex ---")
         start_time = time.time()
         solution, history = solver.solve_with_history(prob)
         end_time = time.time()
@@ -74,5 +108,6 @@ def run_two_phase_klee_minty_differences(start=3, stop=10):
     
 
 if __name__ == "__main__":
-    run_two_phase_klee_minty_differences(start=3, stop=15)
-    benchmark_simplex_klee_minty(n=10)
+    run_two_phase_klee_minty_differences(start=3, stop=3)
+    #benchmark_simplex_klee_minty(n=20)
+    benchmark_shadow_klee_minty(n=20)

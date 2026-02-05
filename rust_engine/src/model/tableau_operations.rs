@@ -1,5 +1,3 @@
-//! Tableau pivot and pivot-selection: pivot column rules, ratio test, pivot operation.
-
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 use crate::model::{Tableau, TableauRow, TableauRowMut};
 use num_traits::{One, Zero};
