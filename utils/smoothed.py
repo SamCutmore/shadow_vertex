@@ -63,6 +63,58 @@ def _is_nonnegativity(coeffs, rel: str, rhs) -> bool:
     return rhs == 0
 
 
+def perturb_rhs(
+    constraints: List[Tuple[list, str, int]],
+    sigma: float,
+    seed: int = 0,
+    skip_bounds: bool = True,
+    denom: int = 32,
+) -> List[Tuple[list, str, Union[int, Rational]]]:
+    """Perturb only the RHS (b vector) of constraints using exact rationals.
+
+    This matches the theoretical formulation for resolving degeneracy:
+    the constraint matrix A is left unchanged and only b is perturbed
+    by small random noise.  A degenerate vertex where l > n constraints
+    are tight splits into up to C(l, n) nearby non-degenerate vertices.
+
+    Each RHS value *b* becomes ``(b * D + p, D)`` where *D* is *denom*
+    and *p* is drawn from a discretised Gaussian clamped to ``[-k, k]``
+    with ``k = round(sigma * D)``.
+
+    Parameters
+    ----------
+    constraints : list of (coeffs, rel, rhs)
+        Original constraint list with **integer** coefficients.
+    sigma : float
+        Perturbation magnitude.  ``k = round(sigma * denom)`` controls the
+        range of the integer noise.  0 means no perturbation.
+    seed : int
+        Random seed for reproducibility.
+    skip_bounds : bool
+        When True, non-negativity constraints (x_i >= 0) are left untouched.
+    denom : int
+        Fixed denominator for perturbed rationals (default 32).
+
+    Returns a **new** list; the original is not modified.
+    """
+    if sigma <= 0:
+        return list(constraints)
+
+    rng = np.random.RandomState(seed)
+    k = max(1, round(sigma * denom))
+    out: list = []
+
+    for coeffs, rel, rhs in constraints:
+        if skip_bounds and _is_nonnegativity(coeffs, rel, rhs):
+            out.append((list(coeffs), rel, rhs))
+            continue
+        noise_r = int(np.clip(np.round(rng.randn() * k), -k, k))
+        new_rhs = (int(rhs) * denom + noise_r, denom)
+        out.append((list(coeffs), rel, new_rhs))
+
+    return out
+
+
 def perturb_constraints(
     constraints: List[Tuple[list, str, int]],
     sigma: float,
@@ -70,16 +122,15 @@ def perturb_constraints(
     skip_bounds: bool = True,
     denom: int = 32,
 ) -> List[Tuple[list, str, Union[int, Rational]]]:
-    """Apply discretised Gaussian perturbation using exact rationals.
+    """Apply discretised Gaussian perturbation to both A and b.
 
     Each coefficient *a* (integer) becomes ``(a * D + p, D)`` where *D* is
     *denom* and *p* is drawn from a discretised Gaussian clamped to
     ``[-k, k]`` with ``k = round(sigma * D)``.  This keeps all denominators
     bounded by *D*, preventing Rational64 overflow during simplex pivots.
 
-    The default ``denom=32`` keeps Rational64 arithmetic safe for the
-    shadow vertex solver's Phase I and parametric pivots on 5D+ problems.
-    Larger values (e.g. 100+) risk i64 overflow in complex LPs.
+    For RHS-only perturbation (matching the theoretical degeneracy
+    resolution), use ``perturb_rhs`` instead.
 
     Parameters
     ----------
@@ -94,7 +145,7 @@ def perturb_constraints(
         When True, non-negativity constraints (x_i >= 0) are left untouched.
         Upper bounds and structural constraints are always perturbed.
     denom : int
-        Fixed denominator for perturbed rationals (default 100).
+        Fixed denominator for perturbed rationals (default 32).
 
     Returns a **new** list; the original is not modified.
     """
