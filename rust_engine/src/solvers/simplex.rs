@@ -26,7 +26,6 @@ where
         + Div<Output = T>
         + PartialOrd,
 {
-    /// Creates a new simplex solver.
     pub fn new() -> Self {
         Self {
             tableau: None,
@@ -81,7 +80,6 @@ where
         self.last_step = None;
     }
 
-    /// Checks initial tableau for negative RHS; returns Err if infeasible.
     fn find_initial_bfs(&mut self) -> Result<bool, Self::Error> {
         if self
             .tableau
@@ -97,8 +95,18 @@ where
         self.done
     }
 
+    fn current_step(&self) -> Step<T> {
+        let tab = self.tableau.as_ref().unwrap();
+        Step {
+            iteration: self.iteration,
+            primal: tab.current_vertex(self.n_vars),
+            objective_value: tab.z_rhs(),
+            status: if self.done { Status::Optimal } else { Status::InProgress },
+        }
+    }
+
     fn step(&mut self) -> Step<T> {
-        let tab = self.tableau.as_mut().expect("Not initialized");
+        let tab = self.tableau.as_mut().unwrap();
 
         let status = match tab.find_pivot_indices() {
             PivotResult::Pivot(row, col) => {
@@ -119,7 +127,7 @@ where
         let step = Step {
             iteration: self.iteration,
             primal: tab.current_vertex(self.n_vars),
-            objective_value: tab.z_rhs.clone(),
+            objective_value: tab.z_rhs(),
             status,
         };
         self.last_step = Some(step.clone());

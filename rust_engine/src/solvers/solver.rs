@@ -74,6 +74,10 @@ pub trait Solver<T> {
         Ok(true)
     }
 
+    /// Returns the current vertex and objective without pivoting.
+    /// Available after `init()` + `find_initial_bfs()`.
+    fn current_step(&self) -> Step<T>;
+
     /// Performs one iteration from the current basis.
     fn step(&mut self) -> Step<T>;
     fn is_done(&self) -> bool;
@@ -90,10 +94,12 @@ pub trait Solver<T> {
     {
         self.init(source);
         self.find_initial_bfs()?;
-        let mut last_step = self.step();
-        while !self.is_done() {
-            last_step = self.step();
-        }
+        let last_step = loop {
+            let s = self.step();
+            if self.is_done() {
+                break s;
+            }
+        };
         match last_step.status {
             Status::Optimal => Ok(Solution {
                 x: last_step.primal,
