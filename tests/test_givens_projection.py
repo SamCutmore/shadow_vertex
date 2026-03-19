@@ -65,7 +65,7 @@ class TestGivensProjection2D(unittest.TestCase):
         for coeffs, rel, rhs in constraints:
             prob.add_constraint(coeffs, rel, rhs)
         solver = linprog_core.PySimplexSolver()
-        _, history = solver.solve_with_history(prob)
+        _, history, _stats = solver.solve_with_history(prob)
 
         path = Path.from_history(history)
         poly = Polyhedron.from_constraints(constraints, path.points if path.points else None)

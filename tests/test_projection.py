@@ -26,7 +26,7 @@ class TestProjection(unittest.TestCase):
         for coeffs, rel, rhs in constraints:
             prob.add_constraint(coeffs, rel, rhs)
         solver = linprog_core.PySimplexSolver()
-        _, history = solver.solve_with_history(prob)
+        _, history, _stats = solver.solve_with_history(prob)
         return constraints, history
 
     def test_path_length_unchanged_by_projection(self):

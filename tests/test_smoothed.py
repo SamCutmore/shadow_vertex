@@ -6,7 +6,7 @@ from fractions import Fraction
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.smoothed import random_auxiliary_objective, perturb_constraints
+from utils.smoothed import random_auxiliary_objective, perturb_rhs, perturb_constraints
 
 
 def _pair_to_frac(pair):
@@ -150,6 +150,71 @@ class TestPerturbConstraints(unittest.TestCase):
             for num, den in coeffs:
                 self.assertEqual(den, 32)
             self.assertEqual(rhs[1], 32)
+
+
+class TestPerturbRhs(unittest.TestCase):
+    CONSTRAINTS = [
+        ([1, 0, 0], ">=", 0),       # bound: x >= 0
+        ([0, 1, 0], ">=", 0),       # bound: y >= 0
+        ([0, 0, 1], "<=", 5),       # upper bound
+        ([1, 1, 0], "<=", 10),      # structural
+        ([2, 0, 1], "<=", 12),      # structural
+    ]
+
+    def test_sigma_zero_returns_identical(self):
+        out = perturb_rhs(self.CONSTRAINTS, sigma=0.0, seed=0)
+        for (oc, orel, orhs), (nc, nrel, nrhs) in zip(self.CONSTRAINTS, out):
+            self.assertEqual(orel, nrel)
+            self.assertEqual(orhs, nrhs)
+            self.assertEqual(oc, nc)
+
+    def test_skip_bounds_preserves_nonnegativity(self):
+        out = perturb_rhs(self.CONSTRAINTS, sigma=1.0, seed=42,
+                          skip_bounds=True)
+        for i in range(2):
+            oc, orel, orhs = self.CONSTRAINTS[i]
+            nc, nrel, nrhs = out[i]
+            self.assertEqual(oc, nc)
+            self.assertEqual(orel, nrel)
+            self.assertEqual(orhs, nrhs)
+
+    def test_coefficients_unchanged(self):
+        out = perturb_rhs(self.CONSTRAINTS, sigma=1.0, seed=42,
+                          skip_bounds=False)
+        for (oc, _, _), (nc, _, _) in zip(self.CONSTRAINTS, out):
+            self.assertEqual(oc, nc)
+
+    def test_rhs_perturbed_for_structural(self):
+        out = perturb_rhs(self.CONSTRAINTS, sigma=1.0, seed=42,
+                          skip_bounds=True)
+        any_changed = False
+        for i in range(2, 5):
+            _, _, orhs = self.CONSTRAINTS[i]
+            _, _, nrhs = out[i]
+            if orhs != nrhs:
+                any_changed = True
+        self.assertTrue(any_changed)
+
+    def test_perturbed_rhs_is_rational_pair(self):
+        out = perturb_rhs(self.CONSTRAINTS, sigma=0.1, seed=0,
+                          skip_bounds=True)
+        for _, _, rhs in out[2:]:
+            self.assertIsInstance(rhs, tuple)
+            self.assertEqual(len(rhs), 2)
+
+    def test_deterministic(self):
+        out1 = perturb_rhs(self.CONSTRAINTS, sigma=0.5, seed=77)
+        out2 = perturb_rhs(self.CONSTRAINTS, sigma=0.5, seed=77)
+        for (c1, r1, rhs1), (c2, r2, rhs2) in zip(out1, out2):
+            self.assertEqual(c1, c2)
+            self.assertEqual(r1, r2)
+            self.assertEqual(rhs1, rhs2)
+
+    def test_original_not_modified(self):
+        import copy
+        original = copy.deepcopy(self.CONSTRAINTS)
+        perturb_rhs(self.CONSTRAINTS, sigma=1.0, seed=0)
+        self.assertEqual(self.CONSTRAINTS, original)
 
 
 if __name__ == "__main__":

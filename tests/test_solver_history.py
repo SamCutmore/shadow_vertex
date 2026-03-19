@@ -46,7 +46,7 @@ class TestSimplexHistory(unittest.TestCase):
     def test_tesseract_3d_has_4_unique_vertices(self):
         prob, _ = _tesseract_problem(3)
         solver = linprog_core.PySimplexSolver()
-        sol, history = solver.solve_with_history(prob)
+        sol, history, _stats = solver.solve_with_history(prob)
         primals = _primals(history)
         self.assertEqual(sol.status, "optimal")
         self.assertEqual(sol.objective, 3.0)
@@ -59,7 +59,7 @@ class TestSimplexHistory(unittest.TestCase):
     def test_tesseract_4d_starts_at_origin(self):
         prob, _ = _tesseract_problem(4)
         solver = linprog_core.PySimplexSolver()
-        sol, history = solver.solve_with_history(prob)
+        sol, history, _stats = solver.solve_with_history(prob)
         primals = _primals(history)
         self.assertEqual(sol.status, "optimal")
         self.assertEqual(sol.objective, 4.0)
@@ -72,7 +72,7 @@ class TestSimplexHistory(unittest.TestCase):
     def test_kleeminty_3d_starts_at_origin_ends_at_optimal(self):
         prob, _ = _kleeminty_problem(3)
         solver = linprog_core.PySimplexSolver()
-        sol, history = solver.solve_with_history(prob)
+        sol, history, _stats = solver.solve_with_history(prob)
         primals = _primals(history)
         self.assertEqual(sol.status, "optimal")
         self.assertEqual(sol.objective, 25.0)
@@ -84,7 +84,7 @@ class TestSimplexHistory(unittest.TestCase):
         """The final vertex must not appear twice."""
         prob, _ = _tesseract_problem(3)
         solver = linprog_core.PySimplexSolver()
-        _, history = solver.solve_with_history(prob)
+        _, history, _stats = solver.solve_with_history(prob)
         primals = _primals(history)
         self.assertNotEqual(len(primals), 0)
         if len(primals) >= 2:
@@ -98,7 +98,7 @@ class TestShadowVertexHistory(unittest.TestCase):
         solver = linprog_core.PyShadowVertexSimplexSolver()
         solver.set_auxiliary_objective(
             [-1.0] * n, [0.0] * len(constraints), 0.0)
-        sol, history, shadow_pts = solver.solve_with_shadow_history(prob)
+        sol, history, shadow_pts, _stats = solver.solve_with_shadow_history(prob)
         return sol, history, shadow_pts
 
     def test_tesseract_3d_has_4_unique_vertices(self):
