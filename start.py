@@ -45,9 +45,33 @@ def _tesseract(n):
     return objective, constraints
 
 
+def _degenerate(n):
+    """Unit hypercube with extra constraints making the origin degenerate.
+
+    The origin has n non-negativity constraints plus n-1 additional
+    constraints of the form x_i + x_{i+1} <= 1, all tight at the origin.
+    This gives l = 2n - 1 tight constraints at the origin (for n >= 2),
+    so perturbing b splits it into up to C(2n-1, n) nearby vertices.
+    """
+    objective = [1] * n
+    constraints = []
+    for i in range(n):
+        e = [0] * n
+        e[i] = 1
+        constraints.append((e, ">=", 0))
+        constraints.append((e, "<=", 1))
+    for i in range(n - 1):
+        row = [0] * n
+        row[i] = 1
+        row[i + 1] = 1
+        constraints.append((row, "<=", 1))
+    return objective, constraints
+
+
 PROBLEMS = {
     "kleeminty": _kleeminty,
     "tesseract": _tesseract,
+    "degenerate": _degenerate,
 }
 
 
@@ -72,7 +96,7 @@ def _run_simplex(prob, args):
     import linprog_core
 
     solver = linprog_core.PySimplexSolver()
-    solution, history = solver.solve_with_history(prob)
+    solution, history, _stats = solver.solve_with_history(prob)
     return solution, history, None, None
 
 
@@ -89,7 +113,7 @@ def _run_shadow_vertex(prob, args, objective, constraints, n_vars):
     solver = linprog_core.PyShadowVertexSimplexSolver()
     n_slack = len(constraints)
     solver.set_auxiliary_objective(d_coeffs, [0] * n_slack, 0)
-    solution, history, shadow_points = solver.solve_with_shadow_history(prob)
+    solution, history, shadow_points, _stats = solver.solve_with_shadow_history(prob)
 
     d_coeffs_float = [_rat_to_float(v) for v in d_coeffs]
     return solution, history, shadow_points, d_coeffs_float
@@ -110,6 +134,9 @@ def main():
                        dest="problem", help="Klee-Minty distorted cube LP")
     group.add_argument("--tesseract", action="store_const", const="tesseract",
                        dest="problem", help="Unit hypercube LP")
+    group.add_argument("--degenerate", action="store_const", const="degenerate",
+                       dest="problem",
+                       help="Unit hypercube with extra constraints (degenerate origin)")
     parser.add_argument("--dim", "--dimensions", type=int, default=3,
                         help="Number of decision variables (default: 3)")
     parser.add_argument("--solver", choices=["simplex", "shadow_vertex"],
@@ -130,13 +157,13 @@ def main():
 
     import linprog_core
     from view import run_visualization_2d
-    from utils.smoothed import perturb_constraints
+    from utils.smoothed import perturb_rhs
 
     objective, constraints = PROBLEMS[args.problem](args.dim)
     n_vars = args.dim
 
     if args.sigma > 0:
-        constraints = perturb_constraints(constraints, args.sigma, args.seed)
+        constraints = perturb_rhs(constraints, args.sigma, args.seed)
 
     prob = linprog_core.PyProblem(objective, goal="max")
     for coeffs, rel, rhs in constraints:
