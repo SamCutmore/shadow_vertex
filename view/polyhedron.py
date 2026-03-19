@@ -146,6 +146,31 @@ class Polyhedron:
                 poly = poly[::-1]
         return poly
 
+    @staticmethod
+    def _chebyshev_center(half: np.ndarray, n_dim: int) -> Optional[np.ndarray]:
+        """Find a strictly interior point via the Chebyshev center LP.
+
+        Maximises the inscribed ball radius r such that a_i^T x + r||a_i|| <= b_i
+        for all halfspaces.  Returns None if the polytope is empty or unbounded.
+        """
+        try:
+            from scipy.optimize import linprog as scipy_linprog
+        except ImportError:
+            return None
+        normals = half[:, :-1]
+        offsets = -half[:, -1]
+        norms = np.linalg.norm(normals, axis=1, keepdims=True)
+        norms[norms < 1e-15] = 1.0
+        c_lp = np.zeros(n_dim + 1)
+        c_lp[-1] = -1  # maximise radius
+        A_ub = np.hstack([normals, norms])
+        b_ub = offsets
+        res = scipy_linprog(c_lp, A_ub=A_ub, b_ub=b_ub,
+                            bounds=[(None, None)] * n_dim + [(0, None)])
+        if res.success and res.x[-1] > 1e-10:
+            return res.x[:n_dim]
+        return None
+
     @classmethod
     def _from_nd(
         cls,
@@ -168,23 +193,37 @@ class Polyhedron:
         if not rows:
             return [], []
         half = np.array(rows, dtype=np.float64)
+
+        # Try candidate interior points in order of preference:
+        # 1. First point from the solver path / caller hint
+        # 2. Chebyshev center (robust, works for any bounded polytope)
+        # 3. Fallback to (0.5, ..., 0.5)
+        candidates = []
         if interior_or_path and len(interior_or_path) >= 1:
-            interior = np.asarray(interior_or_path[0], dtype=np.float64).reshape(n_dim)
-        else:
-            interior = np.ones(n_dim, dtype=np.float64) * 0.5
-        if np.allclose(interior, 0):
-            interior = np.ones(n_dim, dtype=np.float64) * 0.5
-        try:
-            hs = HalfspaceIntersection(half, interior)
-            v = hs.intersections
-            if len(v) < n_dim + 1:
-                return [list(map(float, p)) for p in v], []
-            hull = ConvexHull(v)
-            verts = [list(map(float, v[i])) for i in range(len(v))]
-            faces = [list(s) for s in hull.simplices]
-            return verts, faces
-        except Exception:
-            return [], []
+            candidates.append(np.asarray(interior_or_path[0], dtype=np.float64).reshape(n_dim))
+        cheby = cls._chebyshev_center(half, n_dim)
+        if cheby is not None:
+            candidates.append(cheby)
+        candidates.append(np.ones(n_dim, dtype=np.float64) * 0.5)
+
+        for interior in candidates:
+            if np.allclose(interior, 0):
+                continue
+            # Verify the point is strictly inside all halfspaces
+            slack = half[:, -1] + half[:, :-1] @ interior
+            if np.all(slack < -1e-10):
+                try:
+                    hs = HalfspaceIntersection(half, interior)
+                    v = hs.intersections
+                    if len(v) < n_dim + 1:
+                        return [list(map(float, p)) for p in v], []
+                    hull = ConvexHull(v)
+                    verts = [list(map(float, v[i])) for i in range(len(v))]
+                    faces = [list(s) for s in hull.simplices]
+                    return verts, faces
+                except Exception:
+                    continue
+        return [], []
 
 
 class Path:
