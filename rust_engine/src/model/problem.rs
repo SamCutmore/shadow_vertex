@@ -71,7 +71,6 @@ where
 
     pub fn into_standard_form(self) -> StandardForm<T> {
         let one = T::one();
-        let neg_one = -T::one();
         let zero = T::zero();
 
         let surplus_slack = self.constraints.iter().filter(|c| c.relation != Relation::Equal).count();
@@ -94,7 +93,7 @@ where
                     slack_indices.push(slack_index);
                 },
                 Relation::GreaterEqual => {
-                    row_data[slack_index] = neg_one.clone();
+                    row_data[slack_index] = -one;
                     slack_indices.push(slack_index);
                 },
                 Relation::Equal => {}
@@ -129,62 +128,43 @@ where
 
     pub fn into_tableau_form(self) -> Tableau<T> {
         let one = T::one();
-        let neg_one = -T::one();
         let zero = T::zero();
 
         let m = self.constraints.len();
         let n = self.objective.len();
+        let total_cols = n + m + 1;
 
-        let mut a_matrix = Matrix::with_capacity(m, n);
-        let mut s_matrix = Matrix::with_capacity(m, m);
-        let mut b_vec = Vec::with_capacity(m);
-        
+        let mut data = Matrix::with_capacity(m + 1, total_cols);
         let mut basis = Vec::with_capacity(m);
         let nonbasis: Vec<usize> = (0..n).collect();
 
-        let mut z_coeffs = Vec::with_capacity(n);
-        for val in self.objective {
-            z_coeffs.push(if self.goal == Goal::Max {
-                -val
-            } else {
-                val
-            });
-        }
-        let z_slack = vec![zero.clone(); m];
-        let z_rhs = zero.clone();
-
         for (i, constraint) in self.constraints.into_iter().enumerate() {
             let normalised = constraint.normalise();
-            
-            a_matrix.push_row(&normalised.coefficients);
-            b_vec.push(normalised.rhs);
+            let mut row_data = Vec::with_capacity(total_cols);
 
-            let mut slack_row = vec![zero.clone(); m];
+            row_data.extend(normalised.coefficients);
+
+            let mut slack_part = vec![zero; m];
             match normalised.relation {
-                Relation::LessEqual => {
-                    slack_row[i] = one.clone();
-                    basis.push(n + i);
-                },
-                Relation::GreaterEqual => {
-                    slack_row[i] = neg_one.clone();
-                    basis.push(n + i);
-                },
-                Relation::Equal => {
-                    basis.push(n + i); 
-                }
+                Relation::LessEqual => { slack_part[i] = one; },
+                Relation::GreaterEqual => { slack_part[i] = -one; },
+                Relation::Equal => {},
             }
-            s_matrix.push_row(&slack_row);
+            row_data.extend(slack_part);
+            row_data.push(normalised.rhs);
+
+            data.push_row(&row_data);
+            basis.push(n + i);
         }
 
-        Tableau {
-            coefficients: a_matrix,
-            slack: s_matrix,
-            rhs: b_vec,
-            basis,
-            nonbasis,
-            z_coeffs,
-            z_slack,
-            z_rhs,
+        let mut z_row_data = Vec::with_capacity(total_cols);
+        for val in self.objective {
+            z_row_data.push(if self.goal == Goal::Max { -val } else { val });
         }
+        z_row_data.extend(vec![zero; m]);
+        z_row_data.push(zero);
+        data.push_row(&z_row_data);
+
+        Tableau { data, n, m, basis, nonbasis }
     }
 }

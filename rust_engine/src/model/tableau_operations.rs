@@ -1,18 +1,6 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
-use crate::model::{Tableau, TableauRow, TableauRowMut};
+use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div};
+use crate::model::Tableau;
 use num_traits::{One, Zero};
-
-impl<'a, T> TableauRowMut<'a, T> {
-    /// Performs `self -= rhs * scalar` in place without allocating a temporary TableauRow.
-    pub fn sub_assign_scaled(&mut self, rhs: &TableauRow<T>, scalar: T)
-    where
-        T: Copy + SubAssign + Mul<Output = T>,
-    {
-        self.coefficients.sub_assign_scaled(&rhs.coefficients, scalar);
-        self.slack.sub_assign_scaled(&rhs.slack, scalar);
-        *self.rhs -= rhs.rhs * scalar;
-    }
-}
 
 /// Pivot selection outcome: Optimal, Unbounded, or Pivot(row, col).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,153 +10,14 @@ pub enum PivotResult {
     Pivot(usize, usize),
 }
 
-#[inline]
-fn assert_same_shape<T>(a: &TableauRow<T>, b: &TableauRow<T>) {
-    debug_assert_eq!(
-        a.coefficients.data.len() + a.slack.data.len(),
-        b.coefficients.data.len() + b.slack.data.len()
-    );
-}
-
-macro_rules! impl_tableau_row_binary_ops {
-    ($trait:ident, $method:ident) => {
-        impl<'a, 'b, T> $trait<&'b TableauRow<T>> for &'a TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
-                assert_same_shape(self, rhs);
-                TableauRow {
-                    coefficients: (&self.coefficients).$method(&rhs.coefficients),
-                    slack: (&self.slack).$method(&rhs.slack),
-                    rhs: self.rhs.$method(rhs.rhs),
-                }
-            }
-        }
-        impl<'b, T> $trait<&'b TableauRow<T>> for TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: &'b TableauRow<T>) -> TableauRow<T> {
-                (&self).$method(rhs)
-            }
-        }
-        impl<'a, T> $trait<TableauRow<T>> for &'a TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: TableauRow<T>) -> TableauRow<T> {
-                self.$method(&rhs)
-            }
-        }
-        impl<T> $trait<TableauRow<T>> for TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: TableauRow<T>) -> TableauRow<T> {
-                (&self).$method(&rhs)
-            }
-        }
-        impl<'a, T> $trait<T> for &'a TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: T) -> TableauRow<T> {
-                TableauRow {
-                    coefficients: (&self.coefficients).$method(rhs),
-                    slack: (&self.slack).$method(rhs),
-                    rhs: self.rhs.$method(rhs),
-                }
-            }
-        }
-        impl<T> $trait<T> for TableauRow<T>
-        where
-            T: Copy + $trait<Output = T>,
-        {
-            type Output = TableauRow<T>;
-            fn $method(self, rhs: T) -> TableauRow<T> {
-                (&self).$method(rhs)
-            }
-        }
-    };
-}
-
-macro_rules! impl_tableau_row_assign_ops {
-    ($assign_trait:ident, $assign_method:ident) => {
-        impl<'a, T> $assign_trait<&'a TableauRow<T>> for TableauRow<T>
-        where
-            T: Copy + $assign_trait,
-        {
-            fn $assign_method(&mut self, rhs: &'a TableauRow<T>) {
-                self.coefficients.$assign_method(&rhs.coefficients);
-                self.slack.$assign_method(&rhs.slack);
-                self.rhs.$assign_method(rhs.rhs);
-            }
-        }
-        impl<T> $assign_trait<T> for TableauRow<T>
-        where
-            T: Copy + $assign_trait,
-        {
-            fn $assign_method(&mut self, rhs: T) {
-                self.coefficients.$assign_method(rhs);
-                self.slack.$assign_method(rhs);
-                self.rhs.$assign_method(rhs);
-            }
-        }
-        impl<'a, 'b, T> $assign_trait<&'b TableauRow<T>> for TableauRowMut<'a, T>
-        where
-            T: Copy + $assign_trait,
-        {
-            fn $assign_method(&mut self, rhs: &'b TableauRow<T>) {
-                self.coefficients.$assign_method(&rhs.coefficients);
-                self.slack.$assign_method(&rhs.slack);
-                (*self.rhs).$assign_method(rhs.rhs);
-            }
-        }
-        impl<'a, T> $assign_trait<TableauRow<T>> for TableauRowMut<'a, T>
-        where
-            T: Copy + $assign_trait,
-        {
-            fn $assign_method(&mut self, rhs: TableauRow<T>) {
-                self.coefficients.$assign_method(rhs.coefficients);
-                self.slack.$assign_method(rhs.slack);
-                (*self.rhs).$assign_method(rhs.rhs);
-            }
-        }
-        impl<'a, T> $assign_trait<T> for TableauRowMut<'a, T>
-        where
-            T: Copy + $assign_trait,
-        {
-            fn $assign_method(&mut self, rhs: T) {
-                self.coefficients.$assign_method(rhs);
-                self.slack.$assign_method(rhs);
-                (*self.rhs).$assign_method(rhs);
-            }
-        }
-    };
-}
-
-impl<T> Tableau<T> 
-where T: Zero + PartialOrd + Clone + Copy + Div<Output = T> 
+impl<T> Tableau<T>
+where
+    T: Zero + PartialOrd + Clone + Copy + Div<Output = T>,
 {
-    /// Z-row entries (column index, reduced cost) for coefficients then slack.
+    /// Z-row entries (column index, value) for variable columns only (excludes RHS).
     fn z_row_entries(&self) -> impl Iterator<Item = (usize, T)> + '_ {
-        let n = self.z_coeffs.len();
-        self.z_coeffs
-            .iter()
-            .enumerate()
-            .map(move |(j, &v)| (j, v))
-            .chain(
-                self.z_slack
-                    .iter()
-                    .enumerate()
-                    .map(move |(j, &v)| (n + j, v)),
-            )
+        let m = self.m;
+        (0..self.num_vars()).map(move |j| (j, self.data[(m, j)]))
     }
 
     /// Pivot column by Dantzig rule (most negative reduced cost).
@@ -195,12 +44,12 @@ where T: Zero + PartialOrd + Clone + Copy + Div<Output = T>
     pub fn ratio_test(&self, col: usize) -> Option<usize> {
         let mut best_row = None;
         let mut min_ratio: Option<T> = None;
+        let rhs_col = self.rhs_col();
 
-        for i in 0..self.rows() {
-            let entry = self[(i, col)];
-
+        for i in 0..self.m {
+            let entry = self.data[(i, col)];
             if entry > T::zero() {
-                let ratio = self.rhs[i] / entry;
+                let ratio = self.data[(i, rhs_col)] / entry;
                 if min_ratio.is_none() || ratio < min_ratio.unwrap() {
                     min_ratio = Some(ratio);
                     best_row = Some(i);
@@ -221,7 +70,7 @@ where T: Zero + PartialOrd + Clone + Copy + Div<Output = T>
         }
     }
 
-    /// Same as find_pivot_indices but uses Bland's rule (first negative column) to avoid cycling.
+    /// Same as find_pivot_indices but uses Bland's rule to avoid cycling.
     pub fn find_pivot_indices_bland(&self) -> PivotResult {
         match self.find_pivot_col_bland() {
             None => PivotResult::Optimal,
@@ -232,15 +81,16 @@ where T: Zero + PartialOrd + Clone + Copy + Div<Output = T>
         }
     }
 
-    /// Current BFS as a vector of length n_vars (non-basic vars = 0, basic = RHS of defining row).
+    /// Current BFS as a vector of length n_vars (non-basic vars = 0, basic = RHS).
     pub fn current_vertex(&self, n_vars: usize) -> Vec<T>
     where
         T: Zero + Clone,
     {
         let mut vertex = vec![T::zero(); n_vars];
+        let rhs_col = self.rhs_col();
         for (row, &var_idx) in self.basis.iter().enumerate() {
             if var_idx < n_vars {
-                vertex[var_idx] = self.rhs[row].clone();
+                vertex[var_idx] = self.data[(row, rhs_col)].clone();
             }
         }
         vertex
@@ -249,6 +99,31 @@ where T: Zero + PartialOrd + Clone + Copy + Div<Output = T>
     /// Returns true when no reduced cost is negative.
     pub fn is_optimal(&self) -> bool {
         self.find_pivot_col_most_negative().is_none()
+    }
+
+    /// Reduced costs: `r_j = w_j - w_B^T * col_j` for each variable column.
+    pub fn reduced_costs(&self, w: &[T]) -> Vec<T>
+    where
+        T: Zero + Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    {
+        (0..self.num_vars()).map(|j| {
+            let dot: T = self.basis.iter().enumerate()
+                .map(|(i, &bi)| w[bi] * self[(i, j)])
+                .fold(T::zero(), |a, b| a + b);
+            w[j] - dot
+        }).collect()
+    }
+
+    /// Computes `sum(w[basis[i]] * rhs(i))` -- the dot product of an objective
+    /// vector with the current basic variable values.
+    pub fn eval_at_basis(&self, w: &[T]) -> T
+    where
+        T: Zero + Copy + Add<Output = T> + Mul<Output = T>,
+    {
+        let rhs_col = self.rhs_col();
+        self.basis.iter().enumerate()
+            .map(|(i, &bi)| w[bi] * self.data[(i, rhs_col)])
+            .fold(T::zero(), |a, b| a + b)
     }
 }
 
@@ -267,43 +142,25 @@ where
         + SubAssign
         + MulAssign,
 {
-    /// Performs a pivot at (row_idx, col_idx); updates basis and all rows including z.
+    /// Performs a pivot at (row_idx, col_idx); updates basis and all rows including z-row.
     pub fn pivot(&mut self, row_idx: usize, col_idx: usize) {
-        let z_factor = self.z_row()[col_idx];
-        let pivot_element = self[(row_idx, col_idx)];
+        let pivot_element = self.data[(row_idx, col_idx)];
         let inv_pivot = T::one() / pivot_element;
 
         {
-            let mut p_row = self.row_mut(row_idx);
+            let mut p_row = self.data.row_mut(row_idx);
             p_row *= inv_pivot;
         }
-        let norm = self.row(row_idx);
+        let norm = self.data.row(row_idx);
 
-        for i in 0..self.rows() {
+        for i in 0..=self.m {
             if i != row_idx {
-                let factor = self[(i, col_idx)];
-                let mut current = self.row_mut(i);
+                let factor = self.data[(i, col_idx)];
+                let mut current = self.data.row_mut(i);
                 current.sub_assign_scaled(&norm, factor);
             }
         }
 
-        {
-            let mut z_row = self.z_row_mut();
-            z_row.sub_assign_scaled(&norm, z_factor);
-        }
         self.basis[row_idx] = col_idx;
     }
 }
-
-impl_tableau_row_binary_ops!(Add, add);
-impl_tableau_row_assign_ops!(AddAssign, add_assign);
-
-impl_tableau_row_binary_ops!(Sub, sub);
-impl_tableau_row_assign_ops!(SubAssign, sub_assign);
-
-impl_tableau_row_binary_ops!(Mul, mul);
-impl_tableau_row_assign_ops!(MulAssign, mul_assign);
-
-impl_tableau_row_binary_ops!(Div, div);
-impl_tableau_row_assign_ops!(DivAssign, div_assign);
-

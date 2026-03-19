@@ -62,8 +62,8 @@ fn format_expression(coeffs: &[Rational64]) -> String {
 
 impl fmt::Display for Tableau<Rational64> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.coefficients.cols;
-        let m = self.slack.cols;
+        let n = self.n;
+        let m = self.m;
         let rule_len = 10 + (n * 9) + (m * 9) + 10;
 
         writeln!(f, "\nTableau (Basis: {:?})", self.basis)?;
@@ -74,21 +74,21 @@ impl fmt::Display for Tableau<Rational64> {
         writeln!(f, "| {:>8}", "RHS")?;
         writeln!(f, "{}", "-".repeat(rule_len))?;
 
-        for i in 0..self.rows() {
-            let label = if self.basis[i] < n { format!("x{}", self.basis[i]) } 
+        for i in 0..m {
+            let label = if self.basis[i] < n { format!("x{}", self.basis[i]) }
                         else { format!("s{}", self.basis[i] - n) };
             write!(f, "{:>6} | ", label)?;
-            for j in 0..n { write!(f, "{:>8} ", format_rational(self.coefficients[(i, j)]))?; }
+            for j in 0..n { write!(f, "{:>8} ", format_rational(self[(i, j)]))?; }
             write!(f, "| ")?;
-            for j in 0..m { write!(f, "{:>8} ", format_rational(self.slack[(i, j)]))?; }
-            writeln!(f, "| {:>8}", format_rational(self.rhs[i]))?;
+            for j in 0..m { write!(f, "{:>8} ", format_rational(self[(i, n + j)]))?; }
+            writeln!(f, "| {:>8}", format_rational(self.rhs(i)))?;
         }
 
         writeln!(f, "{}", "-".repeat(rule_len))?;
         write!(f, "{:>6} | ", "Z")?;
-        for j in 0..n { write!(f, "{:>8} ", format_rational(self.z_coeffs[j]))?; }
+        for j in 0..n { write!(f, "{:>8} ", format_rational(self[(m, j)]))?; }
         write!(f, "| ")?;
-        for j in 0..m { write!(f, "{:>8} ", format_rational(self.z_slack[j]))?; }
-        writeln!(f, "| {:>8}", format_rational(self.z_rhs))
+        for j in 0..m { write!(f, "{:>8} ", format_rational(self[(m, n + j)]))?; }
+        writeln!(f, "| {:>8}", format_rational(self.z_rhs()))
     }
 }

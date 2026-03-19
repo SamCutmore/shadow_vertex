@@ -56,18 +56,23 @@ where
             assert_eq!(idx, n + i, "slack columns must be the last m columns");
         }
 
-        let mut coefficients = Matrix::with_capacity(m, n);
-        let mut slack = Matrix::with_capacity(m, m);
+        let total_cols = n + m + 1;
+        let mut data = Matrix::with_capacity(m + 1, total_cols);
+
         for r in 0..m {
-            let coeff_row: Vec<T> = (0..n).map(|c| self.a[(r, c)].clone()).collect();
-            coefficients.push_row(&coeff_row);
-            let slack_row: Vec<T> = (0..m).map(|c| self.a[(r, n + c)].clone()).collect();
-            slack.push_row(&slack_row);
+            let mut row_data = Vec::with_capacity(total_cols);
+            for c in 0..n { row_data.push(self.a[(r, c)].clone()); }
+            for c in 0..m { row_data.push(self.a[(r, n + c)].clone()); }
+            row_data.push(self.b[r].clone());
+            data.push_row(&row_data);
         }
-        let rhs = self.b;
-        let z_coeffs = self.c[0..n].to_vec();
-        let z_slack = self.c[n..n + m].to_vec();
-        let z_rhs = T::zero();
-        Tableau::new(coefficients, slack, rhs, z_coeffs, z_slack, z_rhs)
+
+        let mut z_row_data = Vec::with_capacity(total_cols);
+        z_row_data.extend_from_slice(&self.c[0..n]);
+        z_row_data.extend_from_slice(&self.c[n..n + m]);
+        z_row_data.push(T::zero());
+        data.push_row(&z_row_data);
+
+        Tableau::new(data, n, m)
     }
 }

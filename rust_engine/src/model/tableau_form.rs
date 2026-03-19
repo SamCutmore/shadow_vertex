@@ -2,88 +2,174 @@ use crate::linalg::{Matrix, Row, RowMut};
 use num_traits::Zero;
 use std::ops::{Index, IndexMut};
 
-#[derive(Clone, Copy)]
-enum TableauColumn {
-    Coeff(usize),
-    Slack(usize),
-    Rhs,
-}
-
-fn resolve_row_column(a_len: usize, s_len: usize, c: usize) -> TableauColumn {
-    if c < a_len {
-        TableauColumn::Coeff(c)
-    } else if c < a_len + s_len {
-        TableauColumn::Slack(c - a_len)
-    } else {
-        TableauColumn::Rhs
-    }
-}
-
-/// Tableau: coefficient matrix, slack matrix, RHS, basis, nonbasis, and z-row (z_coeffs, z_slack, z_rhs).
+/// Unified simplex tableau stored as a single (m+1) x (n+m+1) matrix:
+///
+/// ```text
+///          col 0..n      col n..n+m     col n+m
+///        ┌────────────┬────────────┬──────────┐
+/// row 0  │            │            │          │
+///   ..   │     A      │     S      │    b     │  m constraint rows
+/// row m-1│            │            │          │
+///        ├────────────┼────────────┼──────────┤
+/// row m  │  z_coeffs  │  z_slack   │  z_rhs   │  objective row
+///        └────────────┴────────────┴──────────┘
+/// ```
 #[derive(Debug, Clone)]
 pub struct Tableau<T> {
-    pub coefficients: Matrix<T>,
-    pub slack: Matrix<T>,
-    pub rhs: Vec<T>,
+    pub data: Matrix<T>,
+    /// Number of structural (decision) variables.
+    pub n: usize,
+    /// Number of constraints.
+    pub m: usize,
     pub basis: Vec<usize>,
     pub nonbasis: Vec<usize>,
-    pub z_coeffs: Vec<T>,
-    pub z_slack: Vec<T>,
-    pub z_rhs: T,
 }
 
 impl<T> Tableau<T>
 where
     T: Clone + Default,
 {
-    /// Builds a tableau from coefficient matrix, slack matrix, RHS, and z-row; basis = [n..n+m], nonbasis = [0..n].
-    pub fn new(coefficients: Matrix<T>, slack: Matrix<T>, rhs: Vec<T>, z_coeffs: Vec<T>, z_slack: Vec<T>, z_rhs: T) -> Self {
+    /// Builds a tableau from a pre-assembled (m+1) x (n+m+1) matrix.
+    pub fn new(data: Matrix<T>, n: usize, m: usize) -> Self {
+        assert_eq!(data.rows, m + 1, "Matrix must have m+1 rows");
+        assert_eq!(data.cols, n + m + 1, "Matrix must have n+m+1 columns");
+
+        let basis: Vec<usize> = (n..n + m).collect();
+        let nonbasis: Vec<usize> = (0..n).collect();
+
+        Self { data, n, m, basis, nonbasis }
+    }
+
+    /// Assembles a tableau from separate coefficient matrix, slack matrix, RHS,
+    /// and z-row components into a single unified matrix.
+    pub fn from_parts(
+        coefficients: Matrix<T>,
+        slack: Matrix<T>,
+        rhs: Vec<T>,
+        z_coeffs: Vec<T>,
+        z_slack: Vec<T>,
+        z_rhs: T,
+    ) -> Self {
         let m = coefficients.rows;
         let n = coefficients.cols;
 
         assert_eq!(slack.rows, m, "Slack rows must equal constraint rows");
         assert_eq!(slack.cols, m, "Slack must be square (m x m)");
         assert_eq!(rhs.len(), m, "RHS length must equal number of rows");
-        
         assert_eq!(z_coeffs.len(), n, "Objective coefficients must match number of variables");
         assert_eq!(z_slack.len(), m, "Objective slack vector must match number of constraints");
 
-        let basis: Vec<usize> = (n..n + m).collect();
-        let nonbasis: Vec<usize> = (0..n).collect();
+        let total_cols = n + m + 1;
+        let mut data = Matrix::with_capacity(m + 1, total_cols);
 
-        Self {
-            coefficients,
-            slack,
-            rhs,
-            basis,
-            nonbasis,
-            z_coeffs,
-            z_slack,
-            z_rhs,
+        for i in 0..m {
+            let mut row_data = Vec::with_capacity(total_cols);
+            for j in 0..n { row_data.push(coefficients[(i, j)].clone()); }
+            for j in 0..m { row_data.push(slack[(i, j)].clone()); }
+            row_data.push(rhs[i].clone());
+            data.push_row(&row_data);
         }
+
+        let mut z_row_data = Vec::with_capacity(total_cols);
+        z_row_data.extend(z_coeffs);
+        z_row_data.extend(z_slack);
+        z_row_data.push(z_rhs);
+        data.push_row(&z_row_data);
+
+        Self::new(data, n, m)
     }
 }
 
 impl<T> Tableau<T> {
-    /// Number of constraint rows.
+    /// Number of constraint rows (excludes z-row).
     pub fn rows(&self) -> usize {
-        self.coefficients.rows
+        self.m
     }
 
+    /// Total columns including RHS.
     pub fn cols(&self) -> usize {
-        self.coefficients.cols + self.slack.cols + 1
+        self.n + self.m + 1
     }
 
-    fn resolve_column(&self, c: usize) -> TableauColumn {
-        let a_cols = self.coefficients.cols;
-        let s_cols = self.slack.cols;
-        if c < a_cols {
-            TableauColumn::Coeff(c)
-        } else if c < a_cols + s_cols {
-            TableauColumn::Slack(c - a_cols)
-        } else {
-            TableauColumn::Rhs
+    /// Number of variable columns (structural + slack, excludes RHS).
+    pub fn num_vars(&self) -> usize {
+        self.n + self.m
+    }
+
+    pub fn rhs_col(&self) -> usize {
+        self.n + self.m
+    }
+}
+
+impl<T: Clone> Tableau<T> {
+    /// RHS value for constraint row i.
+    pub fn rhs(&self, i: usize) -> T {
+        self.data[(i, self.rhs_col())].clone()
+    }
+
+    /// Z-row RHS value (current objective).
+    pub fn z_rhs(&self) -> T {
+        self.data[(self.m, self.rhs_col())].clone()
+    }
+
+    /// Mutable reference to z-row RHS.
+    pub fn z_rhs_mut(&mut self) -> &mut T {
+        let r = self.m;
+        let c = self.rhs_col();
+        &mut self.data[(r, c)]
+    }
+
+    /// Returns a copy of the given row (all columns including RHS).
+    pub fn row(&self, r: usize) -> Row<T> {
+        self.data.row(r)
+    }
+
+    /// Returns a mutable view of the given row.
+    pub fn row_mut(&mut self, r: usize) -> RowMut<'_, T> {
+        self.data.row_mut(r)
+    }
+
+    /// Returns a copy of the z-row.
+    pub fn z_row(&self) -> Row<T> {
+        self.data.row(self.m)
+    }
+
+    /// Returns a mutable view of the z-row.
+    pub fn z_row_mut(&mut self) -> RowMut<'_, T> {
+        self.data.row_mut(self.m)
+    }
+}
+
+impl<T: Copy> Tableau<T> {
+    /// Copies an owned Row into matrix row `i`.
+    /// Enables `tab.set_row(i, tab.row(j) - tab.row(k))`.
+    pub fn set_row(&mut self, r: usize, row: &Row<T>) {
+        assert_eq!(row.data.len(), self.data.cols, "Row length must match tableau width");
+        let range = r * self.data.cols..(r + 1) * self.data.cols;
+        self.data.data[range].copy_from_slice(&row.data);
+    }
+
+    /// Sets the z-row RHS value.
+    pub fn set_z_rhs(&mut self, val: T) {
+        let r = self.m;
+        let c = self.rhs_col();
+        self.data[(r, c)] = val;
+    }
+
+    /// Sets the z-row variable entries from a slice and the RHS in one call.
+    pub fn set_z_row(&mut self, coeffs: &[T], rhs: T) {
+        assert_eq!(coeffs.len(), self.num_vars(), "Coefficients length must match num_vars");
+        let m = self.m;
+        for (j, &v) in coeffs.iter().enumerate() {
+            self.data[(m, j)] = v;
         }
+        self.set_z_rhs(rhs);
+    }
+
+    /// Returns the z-row variable entries (excludes RHS) as an owned Vec.
+    pub fn z_row_vars(&self) -> Vec<T> {
+        let m = self.m;
+        (0..self.num_vars()).map(|j| self.data[(m, j)]).collect()
     }
 }
 
@@ -91,9 +177,10 @@ impl<T> Tableau<T>
 where
     T: PartialOrd + Zero,
 {
-    /// Returns true if any RHS entry is negative.
+    /// Returns true if any constraint-row RHS entry is negative.
     pub fn has_negative_rhs(&self) -> bool {
-        self.rhs.iter().any(|v| *v < T::zero())
+        let c = self.rhs_col();
+        (0..self.m).any(|i| self.data[(i, c)] < T::zero())
     }
 }
 
@@ -101,134 +188,12 @@ impl<T> Index<(usize, usize)> for Tableau<T> {
     type Output = T;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (r, c) = index;
-        debug_assert!(r < self.rows());
-        debug_assert!(c < self.cols());
-        match self.resolve_column(c) {
-            TableauColumn::Coeff(j) => &self.coefficients[(r, j)],
-            TableauColumn::Slack(j) => &self.slack[(r, j)],
-            TableauColumn::Rhs => &self.rhs[r],
-        }
+        &self.data[index]
     }
 }
 
 impl<T> IndexMut<(usize, usize)> for Tableau<T> {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (r, c) = index;
-        debug_assert!(r < self.rows());
-        debug_assert!(c < self.cols());
-        match self.resolve_column(c) {
-            TableauColumn::Coeff(j) => &mut self.coefficients[(r, j)],
-            TableauColumn::Slack(j) => &mut self.slack[(r, j)],
-            TableauColumn::Rhs => &mut self.rhs[r],
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TableauRow<T> {
-    pub coefficients: Row<T>,
-    pub slack: Row<T>,
-    pub rhs: T,
-}
-
-pub struct TableauRowMut<'a, T> {
-    pub coefficients: RowMut<'a, T>,
-    pub slack: RowMut<'a, T>,
-    pub rhs: &'a mut T,
-}
-
-impl<T: Clone> Tableau<T> {
-    /// Returns a copy of the given constraint row (coefficients, slack, rhs).
-    pub fn row(&self, r: usize) -> TableauRow<T> {
-        TableauRow {
-            coefficients: self.coefficients.row(r),
-            slack: self.slack.row(r),
-            rhs: self.rhs[r].clone(),
-        }
-    }
-
-    /// Returns a mutable view of the given constraint row.
-    pub fn row_mut(&mut self, r: usize) -> TableauRowMut<'_, T> {
-        TableauRowMut {
-            coefficients: self.coefficients.row_mut(r),
-            slack: self.slack.row_mut(r),
-            rhs: &mut self.rhs[r],
-        }
-    }
-
-    /// Returns a copy of the z-row.
-    pub fn z_row(&self) -> TableauRow<T> {
-        TableauRow {
-            coefficients: Row { data: self.z_coeffs.clone() },
-            slack: Row { data: self.z_slack.clone() },
-            rhs: self.z_rhs.clone(),
-        }
-    }
-
-    /// Returns a mutable view of the z-row.
-    pub fn z_row_mut(&mut self) -> TableauRowMut<'_, T> {
-        TableauRowMut {
-            coefficients: RowMut { data: &mut self.z_coeffs },
-            slack: RowMut { data: &mut self.z_slack },
-            rhs: &mut self.z_rhs,
-        }
-    }
-}
-
-impl<T> TableauRow<T> {
-    /// Logical column count for this row.
-    pub fn cols(&self) -> usize {
-        self.coefficients.data.len() + self.slack.data.len() + 1
-    }
-}
-
-impl<T> Index<usize> for TableauRow<T> {
-    type Output = T;
-
-    fn index(&self, c: usize) -> &Self::Output {
-        let a = self.coefficients.data.len();
-        let s = self.slack.data.len();
-        debug_assert!(c < a + s + 1);
-        match resolve_row_column(a, s, c) {
-            TableauColumn::Coeff(j) => &self.coefficients.data[j],
-            TableauColumn::Slack(j) => &self.slack.data[j],
-            TableauColumn::Rhs => &self.rhs,
-        }
-    }
-}
-
-impl<'a, T> TableauRowMut<'a, T> {
-    /// Logical column count for this row.
-    pub fn cols(&self) -> usize {
-        self.coefficients.data.len() + self.slack.data.len() + 1
-    }
-}
-
-impl<'a, T> Index<usize> for TableauRowMut<'a, T> {
-    type Output = T;
-
-    fn index(&self, c: usize) -> &Self::Output {
-        let a = self.coefficients.data.len();
-        let s = self.slack.data.len();
-        debug_assert!(c < a + s + 1);
-        match resolve_row_column(a, s, c) {
-            TableauColumn::Coeff(j) => &self.coefficients.data[j],
-            TableauColumn::Slack(j) => &self.slack.data[j],
-            TableauColumn::Rhs => &self.rhs,
-        }
-    }
-}
-
-impl<'a, T> IndexMut<usize> for TableauRowMut<'a, T> {
-    fn index_mut(&mut self, c: usize) -> &mut Self::Output {
-        let a = self.coefficients.data.len();
-        let s = self.slack.data.len();
-        debug_assert!(c < a + s + 1);
-        match resolve_row_column(a, s, c) {
-            TableauColumn::Coeff(j) => &mut self.coefficients.data[j],
-            TableauColumn::Slack(j) => &mut self.slack.data[j],
-            TableauColumn::Rhs => self.rhs,
-        }
+        &mut self.data[index]
     }
 }
