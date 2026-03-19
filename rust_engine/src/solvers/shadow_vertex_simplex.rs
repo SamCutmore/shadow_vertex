@@ -45,6 +45,7 @@ pub struct ShadowVertexSimplexSolver<T> {
     iteration: usize,
     done: bool,
     last_step: Option<Step<T>>,
+    prev_primal: Option<Vec<T>>,
     /// Auxiliary objective coefficients (length n+m, structural then slack).
     d: Vec<T>,
     d_rhs: T,
@@ -77,6 +78,7 @@ where
             iteration: 0,
             done: false,
             last_step: None,
+            prev_primal: None,
             d: Vec::new(),
             d_rhs: T::zero(),
             c: Vec::new(),
@@ -148,6 +150,11 @@ where
                 x: vec![],
                 objective: T::default(),
                 status: Status::Unbounded,
+            },
+            Status::Cycling => Solution {
+                x: last_step.primal,
+                objective: last_step.objective_value,
+                status: Status::Cycling,
             },
             Status::InProgress => return Err(self.handle_error("Solver stopped prematurely")),
         };
@@ -278,6 +285,7 @@ where
         self.iteration = 0;
         self.done = false;
         self.last_step = None;
+        self.prev_primal = None;
     }
 
     fn find_initial_bfs(&mut self) -> Result<bool, Self::Error> {
@@ -322,32 +330,46 @@ where
             primal: tab.current_vertex(self.n_vars),
             objective_value: tab.z_rhs(),
             status: if self.done { Status::Optimal } else { Status::InProgress },
+            is_degenerate: false,
+            entering_var: None,
+            leaving_var: None,
         }
     }
 
     fn step(&mut self) -> Step<T> {
-        let status = match self.try_pivot_step() {
+        let (status, entering, leaving) = match self.try_pivot_step() {
             PivotResult::Pivot(row, col) => {
+                let leaving_var = self.tableau.as_ref().unwrap().basis[row];
                 self.tableau.as_mut().unwrap().pivot(row, col);
                 self.iteration += 1;
-                Status::InProgress
+                (Status::InProgress, Some(col), Some(leaving_var))
             }
             PivotResult::Optimal => {
                 self.done = true;
-                Status::Optimal
+                (Status::Optimal, None, None)
             }
             PivotResult::Unbounded => {
                 self.done = true;
-                Status::Unbounded
+                (Status::Unbounded, None, None)
             }
         };
 
         let tab = self.tableau.as_ref().unwrap();
+        let primal = tab.current_vertex(self.n_vars);
+        let is_degenerate = self
+            .prev_primal
+            .as_ref()
+            .map_or(false, |prev| *prev == primal);
+        self.prev_primal = Some(primal.clone());
+
         let step = Step {
             iteration: self.iteration,
-            primal: tab.current_vertex(self.n_vars),
+            primal,
             objective_value: tab.z_rhs(),
             status,
+            is_degenerate,
+            entering_var: entering,
+            leaving_var: leaving,
         };
         self.last_step = Some(step.clone());
         step

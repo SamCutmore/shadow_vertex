@@ -30,13 +30,17 @@ where
     }
 }
 
-/// One solver step: iteration index, primal point, objective value, status.
+/// One solver step: iteration index, primal point, objective value, status,
+/// and per-pivot diagnostics.
 #[derive(Clone, Debug)]
 pub struct Step<T> {
     pub iteration: usize,
     pub primal: Vec<T>,
     pub objective_value: T,
     pub status: Status,
+    pub is_degenerate: bool,
+    pub entering_var: Option<usize>,
+    pub leaving_var: Option<usize>,
 }
 
 /// Final solution: primal x, objective value, status.
@@ -54,6 +58,16 @@ pub enum Status {
     Optimal,
     Infeasible,
     Unbounded,
+    Cycling,
+}
+
+/// Aggregate statistics from a complete solve run.
+#[derive(Clone, Debug, Default)]
+pub struct SolveStats {
+    pub total_pivots: usize,
+    pub degenerate_pivots: usize,
+    pub path_length: usize,
+    pub cycling_detected: bool,
 }
 
 impl Default for Status {
@@ -115,6 +129,11 @@ pub trait Solver<T> {
                 x: vec![],
                 objective: T::default(),
                 status: Status::Unbounded,
+            }),
+            Status::Cycling => Ok(Solution {
+                x: last_step.primal,
+                objective: last_step.objective_value,
+                status: Status::Cycling,
             }),
             Status::InProgress => Err(self.handle_error("Solver stopped prematurely")),
         }

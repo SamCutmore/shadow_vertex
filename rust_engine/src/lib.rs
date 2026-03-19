@@ -8,10 +8,10 @@ pub mod solvers;
 
 use crate::model::{Problem, Goal, Relation};
 use crate::solvers::{
-    InitSource, ShadowVertexSimplexSolver, SimplexSolver, Solution, Status, Step, Solver,
+    BlandSimplexSolver, CyclingProneSolver, InitSource, ShadowVertexSimplexSolver,
+    SimplexSolver, Solution, SolveStats, Status, Step, Solver,
 };
 
-/// Converts a Python value to Rational64 (int, float, or (num, den) tuple).
 fn py_to_rational(value: &Bound<'_, PyAny>) -> PyResult<Rational64> {
     if let Ok((n, d)) = value.extract::<(i64, i64)>() {
         if d == 0 {
@@ -40,7 +40,6 @@ fn to_rational_vec(list: &Bound<'_, PyList>) -> PyResult<Vec<Rational64>> {
         .collect()
 }
 
-/// Converts Rational64 to f64 for Python-facing attributes.
 fn rational_to_f64(r: Rational64) -> f64 {
     *r.numer() as f64 / *r.denom() as f64
 }
@@ -51,6 +50,7 @@ fn status_to_str(s: Status) -> &'static str {
         Status::Optimal => "optimal",
         Status::Infeasible => "infeasible",
         Status::Unbounded => "unbounded",
+        Status::Cycling => "cycling",
     }
 }
 
@@ -60,7 +60,6 @@ pub struct PyProblem {
 }
 
 impl PyProblem {
-    /// Returns the underlying problem for solver init.
     pub fn inner(&self) -> &Problem<Rational64> {
         &self.inner
     }
@@ -109,7 +108,7 @@ impl PyProblem {
     }
 
     pub fn __str__(&self) -> String {
-        format!("{}", self.inner) 
+        format!("{}", self.inner)
     }
 
     pub fn __repr__(&self) -> String {
@@ -117,7 +116,6 @@ impl PyProblem {
     }
 }
 
-/// One solver step: primal point, objective value, and status.
 #[pyclass]
 pub struct PyStep {
     #[pyo3(get)]
@@ -128,9 +126,14 @@ pub struct PyStep {
     pub objective_value: f64,
     #[pyo3(get)]
     pub status: String,
+    #[pyo3(get)]
+    pub is_degenerate: bool,
+    #[pyo3(get)]
+    pub entering_var: Option<usize>,
+    #[pyo3(get)]
+    pub leaving_var: Option<usize>,
 }
 
-/// Final solution: primal, objective, and status.
 #[pyclass]
 pub struct PySolution {
     #[pyo3(get)]
@@ -139,6 +142,19 @@ pub struct PySolution {
     pub objective: f64,
     #[pyo3(get)]
     pub status: String,
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PySolveStats {
+    #[pyo3(get)]
+    pub total_pivots: usize,
+    #[pyo3(get)]
+    pub degenerate_pivots: usize,
+    #[pyo3(get)]
+    pub path_length: usize,
+    #[pyo3(get)]
+    pub cycling_detected: bool,
 }
 
 #[pyclass]
@@ -160,7 +176,10 @@ impl PyTableau {
     pub fn num_cols(&self) -> usize { self.inner.cols() }
 }
 
-/// Simplex solver. init(problem) then step(), or solve() / solve_with_history() to run to completion.
+// ---------------------------------------------------------------------------
+// Simplex solver (Dantzig rule, with cycling detection)
+// ---------------------------------------------------------------------------
+
 #[pyclass]
 pub struct PySimplexSolver {
     inner: SimplexSolver<Rational64>,
@@ -177,7 +196,6 @@ impl PySimplexSolver {
         }
     }
 
-    /// Loads the problem; then call find_initial_bfs() and step(), or solve() / solve_with_history().
     pub fn init(&mut self, problem: &PyProblem) -> PyResult<()> {
         self.inner
             .init(InitSource::Problem(problem.inner().clone()));
@@ -185,7 +203,6 @@ impl PySimplexSolver {
         Ok(())
     }
 
-    /// Ensures a feasible basis; returns Err if infeasible.
     pub fn find_initial_bfs(&mut self) -> PyResult<()> {
         self.inner
             .find_initial_bfs()
@@ -193,7 +210,6 @@ impl PySimplexSolver {
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
     }
 
-    /// Performs one iteration and returns the resulting step.
     pub fn step(&mut self) -> PyResult<PyStep> {
         if !self.initialized {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -204,32 +220,161 @@ impl PySimplexSolver {
         Ok(step_to_py(step))
     }
 
-    /// Returns the last step produced, or None.
     pub fn last_step(&self) -> Option<PyStep> {
         self.inner
             .last_step()
             .map(|s: &Step<Rational64>| step_to_py(s.clone()))
     }
 
-    /// Returns true when the solver has reached a terminal status.
     pub fn is_done(&self) -> bool {
         self.inner.is_done()
     }
 
-    /// Runs to completion and returns the final solution.
     pub fn solve(&mut self, problem: &PyProblem) -> PyResult<PySolution> {
         self.initialized = true;
         run_solve(&mut self.inner, InitSource::Problem(problem.inner().clone()))
     }
 
-    /// Run to completion and return (solution, list of steps visited).
-    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>)> {
+    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>, PySolveStats)> {
         self.initialized = true;
         run_solve_with_history(&mut self.inner, InitSource::Problem(problem.inner().clone()))
     }
 }
 
-/// Shadow vertex simplex solver (parametric pivot rule on the d–c plane).
+// ---------------------------------------------------------------------------
+// Bland's rule simplex solver
+// ---------------------------------------------------------------------------
+
+#[pyclass]
+pub struct PyBlandSimplexSolver {
+    inner: BlandSimplexSolver<Rational64>,
+    initialized: bool,
+}
+
+#[pymethods]
+impl PyBlandSimplexSolver {
+    #[new]
+    pub fn new() -> Self {
+        PyBlandSimplexSolver {
+            inner: BlandSimplexSolver::new(),
+            initialized: false,
+        }
+    }
+
+    pub fn init(&mut self, problem: &PyProblem) -> PyResult<()> {
+        self.inner
+            .init(InitSource::Problem(problem.inner().clone()));
+        self.initialized = true;
+        Ok(())
+    }
+
+    pub fn find_initial_bfs(&mut self) -> PyResult<()> {
+        self.inner
+            .find_initial_bfs()
+            .map(|_| ())
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+
+    pub fn step(&mut self) -> PyResult<PyStep> {
+        if !self.initialized {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Solver not initialized; call init(problem) first",
+            ));
+        }
+        let step = self.inner.step();
+        Ok(step_to_py(step))
+    }
+
+    pub fn last_step(&self) -> Option<PyStep> {
+        self.inner
+            .last_step()
+            .map(|s: &Step<Rational64>| step_to_py(s.clone()))
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.inner.is_done()
+    }
+
+    pub fn solve(&mut self, problem: &PyProblem) -> PyResult<PySolution> {
+        self.initialized = true;
+        run_solve(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+
+    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>, PySolveStats)> {
+        self.initialized = true;
+        run_solve_with_history(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cycling-prone simplex solver (largest-index entering + largest-basis leaving)
+// ---------------------------------------------------------------------------
+
+#[pyclass]
+pub struct PyCyclingProneSolver {
+    inner: CyclingProneSolver<Rational64>,
+    initialized: bool,
+}
+
+#[pymethods]
+impl PyCyclingProneSolver {
+    #[new]
+    pub fn new() -> Self {
+        PyCyclingProneSolver {
+            inner: CyclingProneSolver::new(),
+            initialized: false,
+        }
+    }
+
+    pub fn init(&mut self, problem: &PyProblem) -> PyResult<()> {
+        self.inner
+            .init(InitSource::Problem(problem.inner().clone()));
+        self.initialized = true;
+        Ok(())
+    }
+
+    pub fn find_initial_bfs(&mut self) -> PyResult<()> {
+        self.inner
+            .find_initial_bfs()
+            .map(|_| ())
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+
+    pub fn step(&mut self) -> PyResult<PyStep> {
+        if !self.initialized {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Solver not initialized; call init(problem) first",
+            ));
+        }
+        let step = self.inner.step();
+        Ok(step_to_py(step))
+    }
+
+    pub fn last_step(&self) -> Option<PyStep> {
+        self.inner
+            .last_step()
+            .map(|s: &Step<Rational64>| step_to_py(s.clone()))
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.inner.is_done()
+    }
+
+    pub fn solve(&mut self, problem: &PyProblem) -> PyResult<PySolution> {
+        self.initialized = true;
+        run_solve(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+
+    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>, PySolveStats)> {
+        self.initialized = true;
+        run_solve_with_history(&mut self.inner, InitSource::Problem(problem.inner().clone()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shadow vertex simplex solver
+// ---------------------------------------------------------------------------
+
 #[pyclass]
 pub struct PyShadowVertexSimplexSolver {
     inner: ShadowVertexSimplexSolver<Rational64>,
@@ -279,21 +424,16 @@ impl PyShadowVertexSimplexSolver {
         self.inner.is_done()
     }
 
-    /// Runs to completion and returns the final solution.
     pub fn solve(&mut self, problem: &PyProblem) -> PyResult<PySolution> {
         self.initialized = true;
         run_solve(&mut self.inner, InitSource::Problem(problem.inner().clone()))
     }
 
-    /// Run to completion and return (solution, list of steps visited).
-    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>)> {
+    pub fn solve_with_history(&mut self, problem: &PyProblem) -> PyResult<(PySolution, Vec<PyStep>, PySolveStats)> {
         self.initialized = true;
         run_solve_with_history(&mut self.inner, InitSource::Problem(problem.inner().clone()))
     }
 
-    /// Sets the auxiliary objective `d` for the shadow vertex pivot rule.
-    /// Call before `solve_with_shadow_history`.
-    /// Accepts int, float, or (numerator, denominator) tuples.
     pub fn set_auxiliary_objective(
         &mut self,
         d_coeffs: &Bound<'_, PyList>,
@@ -308,33 +448,47 @@ impl PyShadowVertexSimplexSolver {
         Ok(())
     }
 
-    /// Run to completion and return solution, step history, and shadow polygon data.
-    /// Shadow points are (d_value, c_value) at each vertex visited, for plotting the
-    /// 2D shadow of the feasible polytope in the (d, c) plane.
     pub fn solve_with_shadow_history(
         &mut self,
         problem: &PyProblem,
-    ) -> PyResult<(PySolution, Vec<PyStep>, Vec<(f64, f64)>)> {
+    ) -> PyResult<(PySolution, Vec<PyStep>, Vec<(f64, f64)>, PySolveStats)> {
         self.initialized = true;
         let result = self
             .inner
             .solve_with_shadow_history(InitSource::Problem(problem.inner().clone()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
-        let solution = solution_to_py(result.solution);
-        let history: Vec<PyStep> = result
+
+        let mut stats = SolveStats::default();
+        let history_steps: Vec<PyStep> = result
             .history
             .iter()
-            .map(|s: &Step<Rational64>| step_to_py(s.clone()))
+            .map(|s: &Step<Rational64>| {
+                stats.total_pivots = s.iteration;
+                if s.is_degenerate {
+                    stats.degenerate_pivots += 1;
+                }
+                step_to_py(s.clone())
+            })
             .collect();
+        stats.path_length = history_steps.len();
+        stats.cycling_detected = result.solution.status == Status::Cycling;
+        if let Some(last) = result.history.last() {
+            stats.total_pivots = last.iteration;
+        }
+
+        let solution = solution_to_py(result.solution);
         let shadow_points: Vec<(f64, f64)> = result
             .shadow_points
             .iter()
             .map(|(d, c)| (rational_to_f64(*d), rational_to_f64(*c)))
             .collect();
-        Ok((solution, history, shadow_points))
+        Ok((solution, history_steps, shadow_points, stats_to_py(&stats)))
     }
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 fn step_to_py(s: Step<Rational64>) -> PyStep {
     PyStep {
@@ -342,6 +496,9 @@ fn step_to_py(s: Step<Rational64>) -> PyStep {
         primal: s.primal.iter().copied().map(rational_to_f64).collect(),
         objective_value: rational_to_f64(s.objective_value),
         status: status_to_str(s.status).to_string(),
+        is_degenerate: s.is_degenerate,
+        entering_var: s.entering_var,
+        leaving_var: s.leaving_var,
     }
 }
 
@@ -350,6 +507,15 @@ fn solution_to_py(s: Solution<Rational64>) -> PySolution {
         x: s.x.iter().copied().map(rational_to_f64).collect(),
         objective: rational_to_f64(s.objective),
         status: status_to_str(s.status).to_string(),
+    }
+}
+
+fn stats_to_py(s: &SolveStats) -> PySolveStats {
+    PySolveStats {
+        total_pivots: s.total_pivots,
+        degenerate_pivots: s.degenerate_pivots,
+        path_length: s.path_length,
+        cycling_detected: s.cycling_detected,
     }
 }
 
@@ -366,25 +532,33 @@ where
         }
     };
     let sol = match last.status {
-        Status::Optimal => Solution { x: last.primal, objective: last.objective_value, status: last.status },
+        Status::Optimal | Status::Cycling => Solution { x: last.primal, objective: last.objective_value, status: last.status },
         Status::Infeasible | Status::Unbounded => Solution { x: vec![], objective: Rational64::default(), status: last.status },
         Status::InProgress => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Solver stopped prematurely")),
     };
     Ok(solution_to_py(sol))
 }
 
-fn run_solve_with_history<S>(solver: &mut S, source: InitSource<Rational64>) -> PyResult<(PySolution, Vec<PyStep>)>
+fn run_solve_with_history<S>(solver: &mut S, source: InitSource<Rational64>) -> PyResult<(PySolution, Vec<PyStep>, PySolveStats)>
 where
     S: Solver<Rational64, Error = String>,
 {
     solver.init(source);
     solver.find_initial_bfs().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+
     let initial = solver.current_step();
     let mut prev_primal = initial.primal.clone();
     let mut history = vec![step_to_py(initial)];
+
+    let mut stats = SolveStats::default();
+
     let mut last;
     loop {
         last = solver.step();
+        stats.total_pivots += 1;
+        if last.is_degenerate {
+            stats.degenerate_pivots += 1;
+        }
         if solver.is_done() {
             break;
         }
@@ -393,14 +567,18 @@ where
             history.push(step_to_py(last.clone()));
         }
     }
+
+    stats.path_length = history.len();
+    stats.cycling_detected = last.status == Status::Cycling;
+
     let sol = match last.status {
-        Status::Optimal => {
+        Status::Optimal | Status::Cycling => {
             Solution { x: last.primal, objective: last.objective_value, status: last.status }
         }
         Status::Infeasible | Status::Unbounded => Solution { x: vec![], objective: Rational64::default(), status: last.status },
         Status::InProgress => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Solver stopped prematurely")),
     };
-    Ok((solution_to_py(sol), history))
+    Ok((solution_to_py(sol), history, stats_to_py(&stats)))
 }
 
 #[pymodule]
@@ -409,7 +587,10 @@ fn linprog_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTableau>()?;
     m.add_class::<PyStep>()?;
     m.add_class::<PySolution>()?;
+    m.add_class::<PySolveStats>()?;
     m.add_class::<PySimplexSolver>()?;
+    m.add_class::<PyBlandSimplexSolver>()?;
+    m.add_class::<PyCyclingProneSolver>()?;
     m.add_class::<PyShadowVertexSimplexSolver>()?;
     Ok(())
 }

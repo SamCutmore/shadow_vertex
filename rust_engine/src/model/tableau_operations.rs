@@ -41,6 +41,7 @@ where
     }
 
     /// Minimum-ratio test: returns leaving row for the given entering column, or None.
+    /// Ties are broken by smallest row index.
     pub fn ratio_test(&self, col: usize) -> Option<usize> {
         let mut best_row = None;
         let mut min_ratio: Option<T> = None;
@@ -59,11 +60,67 @@ where
         best_row
     }
 
+    /// Minimum-ratio test with smallest-basis-variable tie-breaking: among
+    /// rows that achieve the minimum ratio, the row whose basis variable has
+    /// the smallest index is chosen.
+    pub fn ratio_test_smallest_basis(&self, col: usize) -> Option<usize> {
+        let mut best_row = None;
+        let mut min_ratio: Option<T> = None;
+        let mut best_basis_var: Option<usize> = None;
+        let rhs_col = self.rhs_col();
+
+        for i in 0..self.m {
+            let entry = self.data[(i, col)];
+            if entry > T::zero() {
+                let ratio = self.data[(i, rhs_col)] / entry;
+                let update = if min_ratio.is_none() {
+                    true
+                } else if ratio < min_ratio.unwrap() {
+                    true
+                } else if ratio == min_ratio.unwrap() {
+                    self.basis[i] < best_basis_var.unwrap()
+                } else {
+                    false
+                };
+                if update {
+                    min_ratio = Some(ratio);
+                    best_row = Some(i);
+                    best_basis_var = Some(self.basis[i]);
+                }
+            }
+        }
+        best_row
+    }
+
     /// Chooses pivot (Dantzig column, ratio test row); returns Optimal, Unbounded, or Pivot(row, col).
     pub fn find_pivot_indices(&self) -> PivotResult {
         match self.find_pivot_col_most_negative() {
             None => PivotResult::Optimal,
             Some(col) => match self.ratio_test(col) {
+                Some(row) => PivotResult::Pivot(row, col),
+                None => PivotResult::Unbounded,
+            },
+        }
+    }
+
+    /// Pivot column by largest-index rule: last variable with negative
+    /// reduced cost.
+    pub fn find_pivot_col_largest_index(&self) -> Option<usize> {
+        let mut best_col = None;
+        for (j, val) in self.z_row_entries() {
+            if val < T::zero() {
+                best_col = Some(j);
+            }
+        }
+        best_col
+    }
+
+    /// Largest-index entering + smallest-basis-variable leaving:
+    /// a cycling-prone combination.
+    pub fn find_pivot_indices_cycling_prone(&self) -> PivotResult {
+        match self.find_pivot_col_largest_index() {
+            None => PivotResult::Optimal,
+            Some(col) => match self.ratio_test_smallest_basis(col) {
                 Some(row) => PivotResult::Pivot(row, col),
                 None => PivotResult::Unbounded,
             },
