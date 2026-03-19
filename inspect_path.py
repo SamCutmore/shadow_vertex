@@ -10,35 +10,28 @@ sys.path.insert(0, _root)
 def main():
     parser = argparse.ArgumentParser(description="Inspect shadow vertex path")
     parser.add_argument("--dim", type=int, default=4, help="Dimension (default 4)")
-    parser.add_argument("--kleeminty", action="store_true", help="Use Klee-Minty instead of tesseract")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--kleeminty", action="store_true",
+                       help="Use Klee-Minty instead of tesseract")
+    group.add_argument("--degenerate", action="store_true",
+                       help="Use degenerate polytope (extra constraints at origin)")
     args = parser.parse_args()
+
+    from start import _kleeminty, _tesseract, _degenerate
 
     import linprog_core
 
     if args.kleeminty:
-        n = args.dim
-        objective = [2 ** (n - 1 - i) for i in range(n)]
-        constraints = []
-        for i in range(1, n + 1):
-            coeffs = [2 ** (i - j + 1) for j in range(1, i)] + [1]
-            coeffs.extend([0] * (n - len(coeffs)))
-            constraints.append((coeffs, "<=", 5 ** (i - 1)))
-        for i in range(n):
-            e = [0] * n
-            e[i] = 1
-            constraints.append((e, ">=", 0))
-        name = f"Klee-Minty dim {n}"
+        objective, constraints = _kleeminty(args.dim)
+        name = f"Klee-Minty dim {args.dim}"
+    elif args.degenerate:
+        objective, constraints = _degenerate(args.dim)
+        name = f"Degenerate dim {args.dim}"
     else:
-        n = args.dim
-        objective = [1] * n
-        constraints = []
-        for i in range(n):
-            e = [0] * n
-            e[i] = 1
-            constraints.append((e, ">=", 0))
-            constraints.append((e, "<=", 1))
-        name = f"Tesseract dim {n}"
+        objective, constraints = _tesseract(args.dim)
+        name = f"Tesseract dim {args.dim}"
 
+    n = args.dim
     prob = linprog_core.PyProblem(objective, goal="max")
     for coeffs, rel, rhs in constraints:
         prob.add_constraint(coeffs, rel, rhs)
@@ -47,7 +40,7 @@ def main():
     d_coeffs[-1] = -1
     solver = linprog_core.PyShadowVertexSimplexSolver()
     solver.set_auxiliary_objective(d_coeffs, [0] * len(constraints), 0)
-    solution, history, shadow_points = solver.solve_with_shadow_history(prob)
+    solution, history, shadow_points, _stats = solver.solve_with_shadow_history(prob)
 
     print(f"{name}")
     print(f"  Status: {solution.status}  Objective: {solution.objective}")
