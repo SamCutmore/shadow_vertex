@@ -1,11 +1,18 @@
 [project]
 name = "shadow-vertex"
 version = "0.1.0"
-description = "Add your description here"
+description = "Visualisation of high-dimensional linear programming using the shadow vertex algorithm"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "manim>=0.19.0",
-    "notebook>=7.4.7",
     "numpy>=2.3.3",
+    "scipy>=1.7",
+    "moderngl>=5.8",
+    "moderngl-window>=2.4",
+    "imgui>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "maturin>=1.12",  # 2.x not yet available for Python 3.14+
 ]
